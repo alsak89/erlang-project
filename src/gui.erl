@@ -22,6 +22,7 @@ eventLoop(Frame) ->
   receive
     #wx{ event = #wxClose{} } ->
       io:format("Closing GUI...~n"),
+      ets:delete(myTable),
       ok;
     Event ->
       io:format("eventLoop: ~p~n", [Event]),
@@ -44,8 +45,10 @@ initCallbacks(Frame) ->
   wxButton:disable(UpdateFileButton),
   wxTextCtrl:disable(TextEditor),
   wxTextCtrl:disable(Logger),
-  % put logger in process dict
-  put(logger, Logger),
+  % put logger in ets table
+  ets:new(myTable, [public, named_table]),
+  ets:insert(myTable, {logger, Logger}),
+  log("Welcome to BGU Distributed File System!",[]),
   % attach callbacks to elements
   wxButton:connect(StoreFileButton, command_button_clicked,
     [{ callback, fun onStoreFileButtonClick/2 },
@@ -63,14 +66,13 @@ initCallbacks(Frame) ->
 
 onStoreFileButtonClick(#wx{ userData = StoreFileBrowser },_) ->
   % todo: store the file remotely
-  io:format("Selected file to store: ~p~n", [wxFilePickerCtrl:getPath(StoreFileBrowser)]).
-
+  log("File stored: ~p", [wxFilePickerCtrl:getPath(StoreFileBrowser)]).
 
 onLoadFileButtonClick(#wx{ userData = {LoadFileBrowser, TextEditor} },_) ->
   %todo: load file remotely
   % read contents of the file
   Path = wxFilePickerCtrl:getPath(LoadFileBrowser),
-  io:format("File loaded: ~p~n", [Path]),
+  log("File loaded: ~s", [Path]),
   {ok, Content} = file:open(Path, read),
   Text = getLines(Content),
   % write to gui
@@ -91,12 +93,21 @@ onUpdateFileButtonClick(#wx{ userData = {TextEditor, LoadFileBrowser, UpdateFile
   File = wxFilePickerCtrl:getPath(LoadFileBrowser),
   wxTextCtrl:saveFile(TextEditor, [{file, File}]),
   wxButton:disable(UpdateFileButton),
-  S = io_lib:format("value = ~p",[42]),
-  SS = lists:flatten(S),
-  io:format("SS = ~p~n", [SS]).
+  log("Updated file: ~s", [File]).
 
 onClearLoggerButtonClick(#wx{ userData = Logger },_) ->
   wxTextCtrl:clear(Logger).
 
 log(Entry, Args) ->
+  % write to logger
   List = io_lib:format(Entry,Args),
+  String = lists:flatten(List),
+  TupleList = ets:lookup(myTable, logger), % ets returns list of tuples
+  Tuple = lists:nth(1, TupleList), % grab 1st (and only) tuple
+  WxRef = element(2, Tuple), % grab wx reference from tuple
+  wxTextCtrl:appendText(WxRef, String),
+  wxTextCtrl:appendText(WxRef, "\n"),
+  % write to console
+  io:format(Entry, Args),
+  io:format("~n").
+
