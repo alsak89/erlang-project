@@ -30,10 +30,11 @@ split_file(FileName,AmountOfPieces,Destination) ->
     {error,Reason} ->
       erlang:error(Reason);
     {ok,File} ->
-
+      io:format("file opened is ~p ~n",[File]),
       % read its size
-      FileInfo = file:read_file_info(File),
-      case FileInfo#file_info.size of
+      {ok,FileInfo} = file:read_file_info(File),
+      io:format("file info is ~p ~n",[FileInfo]),
+      case element(2,FileInfo) of
         undefined ->
           erlang:error(file_size_undefined);
         FileSize ->
@@ -47,14 +48,32 @@ split_file(FileName,AmountOfPieces,Destination) ->
 
 
 
-copyFromFileToPieces(_, _, _, AmountOfPieces, CurrentPieceIndex) when AmountOfPieces =:= CurrentPieceIndex ->
-  ok;
-copyFromFileToPieces(File, Destination, PieceSize, AmountOfPieces, CurrentPieceIndex) ->
-  NewFile = file:open(Destination ++ 'part_' ++ CurrentPieceIndex,[write]),
-  file:copy(File,NewFile,PieceSize),
-  copyFromFileToPieces(File,Destination,PieceSize,AmountOfPieces,CurrentPieceIndex+1).
+
 
 %% @doc Given a list of file chunks, return the original file.
 %% The chunks and their amount is given
 %%merge_file(ListOfFilePieces,Amount) ->
 %%  {ok,File}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%% @doc Given an open file, a destination to put chunks of file in, the
+%% size of each chunk, the amount of chunks and the current chunk to
+%% be done (starts at 0), copy the file into small chunked pieces of it.
+copyFromFileToPieces(_, _, _, AmountOfPieces, CurrentPieceIndex) when AmountOfPieces =:= CurrentPieceIndex ->
+  ok;
+copyFromFileToPieces(File, Destination, PieceSize, AmountOfPieces, CurrentPieceIndex) ->
+  NewFileName = filename:join([Destination , "part_" ++ lists:flatten(io_lib:format("~p",[CurrentPieceIndex]))]),
+  NewFile = file:open(NewFileName,[write]),
+  io:format("file opened is now ~p ~n",[File]),
+  io:format("now copying part ~p which is of size ~p.~n",[CurrentPieceIndex,PieceSize]),
+  case file:copy(File,NewFileName,PieceSize) of
+    {ok,BytesTransferred} ->
+      io:format("~p bytes were transferred.~n",[BytesTransferred]);
+    {error, Reason} ->
+      io:format("Error ~p was encountered.~n",[Reason])
+  end,
+  %file:close(NewFile),
+  copyFromFileToPieces(File,Destination,PieceSize,AmountOfPieces,CurrentPieceIndex+1).
