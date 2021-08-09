@@ -30,31 +30,33 @@
 -spec(start_link() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start_link() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+  gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
 
-%% @private
-%% @doc Initializes the server
--spec(init(Args :: term()) ->
-  {ok, State :: #server_state{}} | {ok, State :: #server_state{}, timeout() | hibernate} |
-  {stop, Reason :: term()} | ignore).
+% init of the server
 init([]) ->
+  io:format("Initiating server...~n"),
+  % start as distributed node
+  net_kernel:start(['server@127.0.0.1', longnames]),
+  % subscribe to nodes monitoring
+  %net_kernel:monitor_nodes(true),
+  % init ets table to hold storage nodes
+  ets:new(storage_nodes, [public, named_table]),
+  % starts node listener process
+  spawn(fun() -> nodesListener(self()) end),
   {ok, #server_state{}}.
 
-%% @private
-%% @doc Handling call messages
--spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: #server_state{}) ->
-  {reply, Reply :: term(), NewState :: #server_state{}} |
-  {reply, Reply :: term(), NewState :: #server_state{}, timeout() | hibernate} |
-  {noreply, NewState :: #server_state{}} |
-  {noreply, NewState :: #server_state{}, timeout() | hibernate} |
-  {stop, Reason :: term(), Reply :: term(), NewState :: #server_state{}} |
-  {stop, Reason :: term(), NewState :: #server_state{}}).
-handle_call(_Request, _From, State = #server_state{}) ->
+% handles store request
+handle_call({store, File}, _From, State = #server_state{}) ->
+  io:format("Server received a store request: ~s~n", [File]),
+  {reply, ok, State};
+
+% handles load request
+handle_call({load, File}, _From, State = #server_state{}) ->
+  io:format("Server received a load request: ~s~n", [File]),
   {reply, ok, State}.
 
 %% @private
@@ -96,3 +98,18 @@ code_change(_OldVsn, State = #server_state{}, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+% listens to nodes up/down events
+% updates node status in ets table
+nodesListener(ServerPid) ->
+  net_kernel:monitor_nodes(true),
+  receive
+    {nodeup, Node} ->
+      io:format("~p node is up~n", [Node]),
+      ets:insert(storage_nodes, {Node, up}),
+      nodesListener(ServerPid);
+    {nodedown, Node} ->
+      io:format("~p node is down~n", [Node]),
+      ets:insert(storage_nodes, {Node, down}),
+      nodesListener(ServerPid)
+  end.

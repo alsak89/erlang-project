@@ -15,6 +15,7 @@ main() ->
   wxFrame:setMinSize(Frame, { 400, 200 }),
   wxFrame:show(Frame),
   initCallbacks(Frame),
+  connectToServer(),
   eventLoop(Frame),
   wx:destroy().
 
@@ -66,12 +67,14 @@ initCallbacks(Frame) ->
 
 onStoreFileButtonClick(#wx{ userData = StoreFileBrowser },_) ->
   % todo: store the file remotely
+  gen_server:call({global, server}, {store, wxFilePickerCtrl:getPath(StoreFileBrowser)}),
   log("File stored: ~p", [wxFilePickerCtrl:getPath(StoreFileBrowser)]).
 
 onLoadFileButtonClick(#wx{ userData = {LoadFileBrowser, TextEditor} },_) ->
   %todo: load file remotely
   % read contents of the file
   Path = wxFilePickerCtrl:getPath(LoadFileBrowser),
+  gen_server:call({global, server}, {load, Path}),
   log("File loaded: ~s", [Path]),
   {ok, Content} = file:open(Path, read),
   Text = getLines(Content),
@@ -111,3 +114,7 @@ log(Entry, Args) ->
   io:format(Entry, Args),
   io:format("~n").
 
+% connects to the remote server
+connectToServer() ->
+  net_kernel:start(['gui@127.0.0.1', longnames]),
+  net_kernel:connect_node('server@127.0.0.1').
