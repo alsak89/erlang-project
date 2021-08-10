@@ -41,8 +41,6 @@ init([]) ->
   io:format("Initiating server...~n"),
   % start as distributed node
   net_kernel:start(['server@127.0.0.1', longnames]),
-  % subscribe to nodes monitoring
-  %net_kernel:monitor_nodes(true),
   % init ets table to hold storage nodes
   ets:new(storage_nodes, [public, named_table]),
   % starts node listener process
@@ -57,6 +55,11 @@ handle_call({store, File}, _From, State = #server_state{}) ->
 % handles load request
 handle_call({load, File}, _From, State = #server_state{}) ->
   io:format("Server received a load request: ~s~n", [File]),
+  {reply, ok, State};
+
+% handles request for active nodes
+handle_call(get_nodes, _From, State = #server_state{}) ->
+  io:format("Server received a get_nodes request: ~n"),
   {reply, ok, State}.
 
 %% @private
@@ -106,10 +109,10 @@ nodesListener(ServerPid) ->
   receive
     {nodeup, Node} ->
       io:format("~p node is up~n", [Node]),
-      ets:insert(storage_nodes, {Node, up}),
+      ets:insert(storage_nodes, {Node, ""}),
       nodesListener(ServerPid);
     {nodedown, Node} ->
       io:format("~p node is down~n", [Node]),
-      ets:insert(storage_nodes, {Node, down}),
+      ets:delete(storage_nodes, Node),
       nodesListener(ServerPid)
   end.
