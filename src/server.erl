@@ -59,8 +59,8 @@ handle_call({load, File}, _From, State = #server_state{}) ->
 
 % handles request for active nodes
 handle_call(get_nodes, _From, State = #server_state{}) ->
-  io:format("Server received a get_nodes request: ~n"),
-  {reply, ok, State}.
+  io:format("Server received a get_nodes request ~n"),
+  {reply, ets:tab2list(storage_nodes), State}.
 
 %% @private
 %% @doc Handling cast messages

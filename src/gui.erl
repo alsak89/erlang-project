@@ -66,6 +66,9 @@ initCallbacks(Frame) ->
   ok.
 
 onStoreFileButtonClick(#wx{ userData = StoreFileBrowser },_) ->
+  Nodes = gen_server:call({global, server},get_nodes),
+  io:format("Received nodes from server: ~p~n,", Nodes),
+
   % todo: store the file remotely
   gen_server:call({global, server}, {store, wxFilePickerCtrl:getPath(StoreFileBrowser)}),
   log("File stored: ~p", [wxFilePickerCtrl:getPath(StoreFileBrowser)]).
