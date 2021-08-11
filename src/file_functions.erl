@@ -12,7 +12,9 @@
 %% API
 -export([split_file/3,merge_file/3]).
 
+
 -include_lib("kernel/include/file.hrl").
+-include_lib("wx/include/wx.hrl").
 %%-include_lib("stdlib/include/qlc.hrl").
 
 %%%===================================================================
@@ -25,16 +27,16 @@
 %% chunked files.
 %% to be called like this:
 %% file_functions:split_file('tester.txt',3,'C:/final erlang project/testing')
-split_file(FileName,AmountOfPieces,Destination) ->
-
+split_file(FileName,AmountOfPieces,SaveOrTable) ->
+  %log("Starting the split.~n", []),
   % open file
   case file:open(FileName,[read]) of
     {error,Reason} ->
       erlang:error(Reason);
-    {ok,File} ->
+    {ok,_} ->
 
       % read its size
-      {ok,FileInfo} = file:read_file_info(File),
+      {ok,FileInfo} = file:read_file_info(FileName),
       case element(2,FileInfo) of
         undefined ->
           erlang:error(file_size_undefined);
@@ -43,19 +45,19 @@ split_file(FileName,AmountOfPieces,Destination) ->
           % calculate each piece's size
           PieceSize = FileSize / AmountOfPieces,
           LeftOverSize = FileSize rem AmountOfPieces,
+          %log("File size: ~p Piece size: ~p Leftover size: ~p ~n", [FileSize,PieceSize,LeftOverSize]),
 
           %% read entire file into binary
           case file:read_file(FileName) of
             {ok,EntireFileInBinary} ->
 
               %% copy binary to piece files
-              copyFromFileToPieces(FileName,EntireFileInBinary,Destination,PieceSize,AmountOfPieces,LeftOverSize,0);
+              copyFromFileToPieces(SaveOrTable,ets:new(binaryTable,[]), FileName,EntireFileInBinary,PieceSize,AmountOfPieces,LeftOverSize,0);
             {error,Reason} ->
               erlang:error(Reason)
           end
       end
-  end,
-  ok.
+  end.
 
 %% @doc Given a list of file chunks, return the original file.
 %% The chunks and their amount is given as well as the original
@@ -81,7 +83,7 @@ merge_file(OriginalFileName,FilePiecesLocation,Amount) ->
 %% @doc Given an open file, a destination to put chunks of file in, the
 %% size of each chunk, the amount of chunks and the current chunk to
 %% be done (starts at 0), copy the file into small chunked pieces of it.
-copyFromFileToPieces(FileName,FileInBinary, Destination, PieceSize, AmountOfPieces, LeftOverSize, CurrentPieceIndex) when AmountOfPieces =:= CurrentPieceIndex ->
+copyFromFileToPieces(SaveOrTable,TableOfBinaries,FileName,FileInBinary, PieceSize, AmountOfPieces, LeftOverSize, CurrentPieceIndex) when AmountOfPieces =:= CurrentPieceIndex ->
 
   %% END OF THE FUNCTION
   %% if file has a leftover (amount of bytes does not divide by PieceSize without reminder),
@@ -90,37 +92,56 @@ copyFromFileToPieces(FileName,FileInBinary, Destination, PieceSize, AmountOfPiec
     0 -> ok;
     LeftOver ->
 
-      %% create the new file name
-      NewFileName = filename:join([Destination ,
-          lists:flatten(io_lib:format("~p",[FileName])) ++
-          "_part_" ++
-          lists:flatten(io_lib:format("~p",[CurrentPieceIndex]))]),
-
       %% take the relevant part from the original file
       PieceFileInBinary = binary:part(FileInBinary,{trunc(PieceSize) * trunc(CurrentPieceIndex), trunc(LeftOver)}),
 
-      %% write that part to the new file
-      file:write_file(NewFileName, PieceFileInBinary)
-  end;
+      %% create the new file name
 
-copyFromFileToPieces(FileName,FileInBinary, Destination, PieceSize, AmountOfPieces, LeftOverSize, CurrentPieceIndex) ->
+      case SaveOrTable of
+        save ->
+          NewFileName = filename:join([
+              FileName ++
+              "_part_" ++
+              lists:flatten(io_lib:format("~p",[CurrentPieceIndex]))]),
+          %% write that part to the new file
+          file:write_file(NewFileName, PieceFileInBinary);
+        table ->
+          NewFileName = filename:join([
+              FileName ++
+              "_part_" ++
+              lists:flatten(io_lib:format("~p",[CurrentPieceIndex]))]),
+          ets:insert(TableOfBinaries,{NewFileName,PieceFileInBinary})
+      end
+  end,
+  TableOfBinaries;
+
+copyFromFileToPieces(SaveOrTable,TableOfBinaries,FileName,FileInBinary, PieceSize, AmountOfPieces, LeftOverSize, CurrentPieceIndex) ->
 
   %% START OF THE FUNCTION
-
-  %% create the new file name
-  NewFileName = filename:join([Destination ,
-      lists:flatten(io_lib:format("~p",[FileName])) ++
-      "_part_" ++
-      lists:flatten(io_lib:format("~p",[CurrentPieceIndex]))]),
 
   %% take the relevant part from the original file
   PieceFileInBinary = binary:part(FileInBinary,{trunc(PieceSize * CurrentPieceIndex), trunc(PieceSize)}),
 
-  %% write that part to the new file
-  file:write_file(NewFileName, PieceFileInBinary),
-
+  case SaveOrTable of
+    save ->
+      %% create the new file name
+      NewFileName = filename:join([
+          FileName ++
+          "_part_" ++
+          lists:flatten(io_lib:format("~p",[CurrentPieceIndex]))]),
+      %% write that part to the new file
+      file:write_file(NewFileName, PieceFileInBinary);
+    table ->
+      %% create the new file name
+      NewFileName = filename:join([
+          FileName ++
+          "_part_" ++
+          lists:flatten(io_lib:format("~p",[CurrentPieceIndex]))]),
+      %% insert that part to the table
+      ets:insert(TableOfBinaries,{NewFileName,PieceFileInBinary})
+  end,
   %% call function recursively
-  copyFromFileToPieces(FileName,FileInBinary,Destination,PieceSize,AmountOfPieces,LeftOverSize, CurrentPieceIndex+1).
+  copyFromFileToPieces(SaveOrTable,TableOfBinaries,FileName,FileInBinary,PieceSize,AmountOfPieces,LeftOverSize, CurrentPieceIndex+1).
 
 
 %% @doc Given a name of a file, a destination of its chunks,

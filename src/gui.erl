@@ -1,11 +1,13 @@
 -module(gui).
 
 %% API
--export([main/0]).
+-export([main/1]).
+
+%-import(file_functions, [split_file/4,merge_file/3]).
 
 -include_lib("wx/include/wx.hrl").
 
-main() ->
+main(NodeName) ->
   Wx = wx:new(),
   Xrc = wxXmlResource:get(),
   wxXmlResource:initAllHandlers(Xrc),
@@ -15,7 +17,7 @@ main() ->
   wxFrame:setMinSize(Frame, { 400, 200 }),
   wxFrame:show(Frame),
   initCallbacks(Frame),
-  connectToServer(),
+  connectToServer(NodeName),
   eventLoop(Frame),
   wx:destroy().
 
@@ -66,8 +68,40 @@ initCallbacks(Frame) ->
   ok.
 
 onStoreFileButtonClick(#wx{ userData = StoreFileBrowser },_) ->
-  Nodes = gen_server:call({global, server},get_nodes),
-  io:format("Received nodes from server: ~p~n,", Nodes),
+  {ListOfNodes,AmountOfNodes} = gen_server:call({global, server},get_nodes),
+  %io:format("Received nodes from server: ~p~n,", Nodes),
+
+  NodesTable = ets:new(nodes_table,[]),
+  ets:insert(NodesTable,ListOfNodes),
+
+  log("The table of only nodes: ~p", [NodesTable]),
+
+  ListOfOnlyNodes = keys(NodesTable),
+
+  log("The list of only nodes: ~p", [ListOfOnlyNodes]),
+
+  TableOfBinaries = file_functions:split_file(wxFilePickerCtrl:getPath(StoreFileBrowser),AmountOfNodes,table),
+
+  log("The table of only binaries: ~p", [TableOfBinaries]),
+
+  ListOfBinaries = ets:tab2list(TableOfBinaries),
+
+  log("The list of only binaries: ~p", [ListOfBinaries]),
+
+  ListOfNodesWithFiles = lists:zipwith(fun({FileName,FileBinary},Node) -> {Node,{FileName,FileBinary}} end,ListOfBinaries,ListOfOnlyNodes),
+
+  log("The list of nodes with file names and binaries: ~p", [ListOfNodesWithFiles]),
+
+  %% TableOfNodesWithFiles: Key: node name, Val: {file name, file binary}
+  TableOfNodesWithFiles = ets:new(nodes_with_files,[]),
+  ets:insert(TableOfNodesWithFiles,ListOfNodesWithFiles),
+
+  log("The table of nodes with file names and binaries: ~p", [TableOfNodesWithFiles]),
+
+  %% send binary files to nodes, return list of which node has which file
+  ListOfNodesAndFileNames = sendFiles(TableOfNodesWithFiles,ets:first(TableOfNodesWithFiles),[]),
+
+  log("The list of nodes anf files: ~p", [ListOfNodesAndFileNames]),
 
   % todo: store the file remotely
   gen_server:call({global, server}, {store, wxFilePickerCtrl:getPath(StoreFileBrowser)}),
@@ -118,6 +152,28 @@ log(Entry, Args) ->
   io:format("~n").
 
 % connects to the remote server
-connectToServer() ->
-  net_kernel:start(['gui@127.0.0.1', longnames]),
+connectToServer(NodeName) ->
+  net_kernel:start([NodeName, longnames]),
   net_kernel:connect_node('server@127.0.0.1').
+
+% get a list of all keys from given ets table
+keys(TableName) ->
+  FirstKey = ets:first(TableName),
+  keys(TableName, FirstKey, [FirstKey]).
+
+keys(_TableName, '$end_of_table', ['$end_of_table'|Acc]) ->
+  Acc;
+keys(TableName, CurrentKey, Acc) ->
+  NextKey = ets:next(TableName, CurrentKey),
+  keys(TableName, NextKey, [NextKey|Acc]).
+
+% send files to nodes
+sendFiles(_,CurrentNode,ListOfNodesAndFileNames) when CurrentNode =:= '$end_of_table' ->
+  ListOfNodesAndFileNames;
+sendFiles(TableOfNodesWithFiles,CurrentNode,ListOfNodesAndFileNames) ->
+  [{_,{FileName,FileBinary}}] = ets:lookup(TableOfNodesWithFiles,CurrentNode),
+  CompressedFileName = filename:join(FileName,".taz.gz"),
+  CompressedFile = erl_tar:create(CompressedFileName,FileBinary,[compressed]),
+
+  %todo: send binary to node
+  sendFiles(TableOfNodesWithFiles,ets:next(TableOfNodesWithFiles,CurrentNode),ListOfNodesAndFileNames ++ [{FileName,CurrentNode}]).
