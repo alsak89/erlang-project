@@ -60,7 +60,7 @@ handle_call({load, File}, _From, State = #server_state{}) ->
 % handles request for active nodes
 handle_call(get_nodes, _From, State = #server_state{}) ->
   io:format("Server received a get_nodes request ~n"),
-  {reply, ets:tab2list(storage_nodes), State}.
+  {reply, {ets:tab2list(storage_nodes),ets:info(storage_nodes,size)}, State}.
 
 %% @private
 %% @doc Handling cast messages
@@ -88,6 +88,7 @@ handle_info(_Info, State = #server_state{}) ->
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #server_state{}) -> term()).
 terminate(_Reason, _State = #server_state{}) ->
+  net_kernel:stop(),
   ok.
 
 %% @private
