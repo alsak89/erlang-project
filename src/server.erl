@@ -56,7 +56,7 @@ init([]) ->
 % store record = {my_file.txt, [{my_file_1.txt, client1@IP}, {my_file_2.txt, client2@IP}]}
 handle_call({store, StoreRecord}, _From, State = #server_state{}) ->
   io:format("Server received a store record: ~s~n", [StoreRecord]),
-  ets:insert(files, StoreRecord),
+  %ets:insert(files, StoreRecord),
   {reply, ok, State};
 
 % handles load request
@@ -67,12 +67,12 @@ handle_call({load, File}, _From, State = #server_state{}) ->
 % handles request for active nodes
 handle_call(get_nodes, _From, State = #server_state{}) ->
   io:format("Server received a get_nodes request ~n"),
-  {reply, ets:tab2list(storage_nodes), State};
+  {reply, {ets:tab2list(storage_nodes),ets:info(storage_nodes,size)}, State};
 
 % handles request for statistics
 handle_call(stats, _From, State = #server_state{}) ->
   io:format("Server received a statistics request ~n"),
-  {reply, ets:tab2list(storage_nodes), State}.
+  {reply, {ets:tab2list(storage_nodes),ets:info(storage_nodes,size)}, State}.
 
 %% @private
 %% @doc Handling cast messages
@@ -100,6 +100,7 @@ handle_info(_Info, State = #server_state{}) ->
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #server_state{}) -> term()).
 terminate(_Reason, _State = #server_state{}) ->
+  net_kernel:stop(),
   ok.
 
 %% @private
