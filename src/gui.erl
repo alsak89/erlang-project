@@ -11,6 +11,8 @@
 -import(file_functions, [split_file/4,merge_file/3]).
 
 main(NodeName,SavedFilesAddress) ->
+  ets:new(general_node_ets,[named_table,public]),
+  ets:insert(general_node_ets,{file_address,SavedFilesAddress}),
   % start disk monitoring
   application:start(sasl),
   application:start(os_mon),
@@ -21,7 +23,6 @@ main(NodeName,SavedFilesAddress) ->
   initMainFrameCallbacks(MainFrame, StatsFrame),
   initStatFrameCallbacks(StatsFrame),
   connectToServer(NodeName),
-  ets:new(my_compressed_files,[public, named_table]),
   spawn_link(fun() -> otherNodesListener(SavedFilesAddress) end),
   eventLoop(MainFrame),
   wx:destroy().
@@ -77,50 +78,90 @@ initMainFrameCallbacks(MainFrame, StatsFrame) ->
   ok.
 
 onStoreFileButtonClick(#wx{ userData = StoreFileBrowser },_) ->
-  {ListOfNodes,AmountOfNodes} = gen_server:call({global, server},get_nodes),
-  %io:format("Received nodes from server: ~p~n,", Nodes),
 
+  %% get list of available nodes from server
+  {ListOfNodes,AmountOfNodes} = gen_server:call({global, server},get_nodes),
+
+  %% transfom them into table
   NodesTable = ets:new(nodes_table,[]),
   ets:insert(NodesTable,ListOfNodes),
 
-  log("The table of only nodes: ~p", [NodesTable]),
-
+  %% get a list of only the nodes
   ListOfOnlyNodes = keys(NodesTable),
 
-  log("The list of only nodes: ~p", [ListOfOnlyNodes]),
-
+  %% split the stored file into pieces and save them in an ets table
   TableOfBinaries = file_functions:split_file(wxFilePickerCtrl:getPath(StoreFileBrowser),AmountOfNodes,table),
 
-  log("The table of only binaries: ~p", [TableOfBinaries]),
-
+  %% get a list from the table
   ListOfBinaries = ets:tab2list(TableOfBinaries),
 
-  log("The list of only binaries: ~p", [ListOfBinaries]),
-
+  %% create a new list where for each node there is a file tuple(consisting of file name and binary)
   ListOfNodesWithFiles = lists:zipwith(fun({FileName,FileBinary},Node) -> {Node,{FileName,FileBinary}} end,ListOfBinaries,ListOfOnlyNodes),
 
-  log("The list of nodes with file names and binaries: ~p", [ListOfNodesWithFiles]),
-
+  %% turn that list into a table
   %% TableOfNodesWithFiles: Key: node name, Val: {file name, file binary}
   TableOfNodesWithFiles = ets:new(nodes_with_files,[]),
   ets:insert(TableOfNodesWithFiles,ListOfNodesWithFiles),
 
-  log("The table of nodes with file names and binaries: ~p", [TableOfNodesWithFiles]),
-
-  %% send binary files to nodes, return list of which node has which file
+  %% send binary files to nodes, return list of which node has which file ready to be sent to server
   ListOfNodesAndFileNames = sendFiles(TableOfNodesWithFiles,ets:first(TableOfNodesWithFiles),[]),
 
-  log("The list of nodes and files: ~p", [ListOfNodesAndFileNames]),
+  %% get file name without path
+  OriginalFileName = filename:basename(wxFilePickerCtrl:getPath(StoreFileBrowser)),
 
-  gen_server:call({global, server}, {store, wxFilePickerCtrl:getPath(StoreFileBrowser)}),
-  log("File stored: ~p", [wxFilePickerCtrl:getPath(StoreFileBrowser)]).
+  %% delete unnecessary ets
+  ets:delete(NodesTable),
+  ets:delete(TableOfNodesWithFiles),
+  ets:delete(TableOfBinaries),
+
+  %% send file name and list of pieces with nodes to server
+  gen_server:call({global, server}, {store, [{OriginalFileName,ListOfNodesAndFileNames}]}),
+  log("File stored: ~p", [OriginalFileName]).
 
 onLoadFileButtonClick(#wx{ userData = {LoadFileBrowser, TextEditor} },_) ->
-  %todo: load file remotely
   % read contents of the file
   Path = wxFilePickerCtrl:getPath(LoadFileBrowser),
-  gen_server:call({global, server}, {load, Path}),
-  log("File loaded: ~s", [Path]),
+  OriginalFileName = filename:basename(Path),
+
+  %% from here on it is assumed that OriginalFileName is the name of the file WITHOUT the path
+  %%todo: implement another button/method in gui to request list of saved files from server
+
+  %% request file pieces locations from server
+  [{_,ListOfFilePiecesWithNodes}] = gen_server:call({global, server}, {load, OriginalFileName}),
+  log("Requested info for file ~s from server, received: ~p", [OriginalFileName,ListOfFilePiecesWithNodes]),
+
+  %% create new ets to save the file pieces' binaries
+  ets:new(file_pieces,[public,ordered_set,{write_concurrency,true},named_table]),
+
+  log("New file_pieces ets created", []),
+
+  %% send request to other nodes for file pieces
+  TableOfFilePiecesWithNodes = ets:new(temp_ets,[]),
+  ets:insert(TableOfFilePiecesWithNodes,ListOfFilePiecesWithNodes),
+  AmountOfFiles = ets:info(TableOfFilePiecesWithNodes,size),
+  requestFiles(TableOfFilePiecesWithNodes,ets:first(TableOfFilePiecesWithNodes)),
+  ets:delete(TableOfFilePiecesWithNodes),
+
+  log("sent requests for files succesfuly, now waiting", []),
+
+  %% wait for all the pieces to arrive
+  checkThatAllPiecesAreHere(AmountOfFiles),
+
+  log("all files arrived, constructing back the original. files binaries: ~p", [ets:tab2list(file_pieces)]),
+  %% reconstruct file from pieces
+  OriginalFileBinary = file_functions:merge_file(OriginalFileName,file_pieces,AmountOfFiles,table),
+
+
+  %% delete used ets table
+  ets:delete(file_pieces),
+
+  %% reconstruct file name with local address
+  [{_,SavedFilesAddress}] = ets:lookup(general_node_ets,file_address),
+  FullFileName = filename:join([SavedFilesAddress ++ OriginalFileName]),
+
+  %% save file locally
+  file:write_file(FullFileName,OriginalFileBinary),
+
   {ok, Content} = file:open(Path, read),
   Text = getLines(Content),
   % write to gui
@@ -249,16 +290,26 @@ sendFiles(TableOfNodesWithFiles,CurrentNode,ListOfNodesAndFileNames) ->
 %%  CompressedFileName = unicode:characters_to_list(CompressedFileNameStage2),
 %%  CompressedFile = erl_tar:create(CompressedFileName,FileBinary,[compressed]),
 
-  FileNameStage1 = string:split(FileName,".txt"),
-  FinalFileName = unicode:characters_to_list(FileNameStage1),
+%%  FileNameStage1 = string:split(FileName,".txt"),
+%%  FinalFileName = unicode:characters_to_list(FileNameStage1),
 
-  log("Sending file to node",[]),
+  log("Sending file ~s to node ~s",[FileName,CurrentNode]),
 
   %% SEND FILE TO NODE
-  {other_nodes_listener,CurrentNode} ! {file_between_nodes,FinalFileName,FileBinary},
+  {other_nodes_listener,CurrentNode} ! {save_file,FileName,FileBinary},
 
   %% call function recursively
   sendFiles(TableOfNodesWithFiles,ets:next(TableOfNodesWithFiles,CurrentNode),ListOfNodesAndFileNames ++ [{FileName,CurrentNode}]).
+
+requestFiles(_TableOfFilesWithNodes,CurrentFile) when CurrentFile =:= '$end_of_table' -> ok;
+requestFiles(TableOfFilesWithNodes,CurrentFile) ->
+  [{_,NodeName}] = ets:lookup(TableOfFilesWithNodes,CurrentFile),
+
+  %% SEND FILE REQUEST TO NODE
+  {other_nodes_listener,NodeName} ! {send_me_file,CurrentFile,node()},
+
+  %% call function recursively
+  requestFiles(TableOfFilesWithNodes,ets:next(TableOfFilesWithNodes,CurrentFile)).
 
 % listen to other nodes trying to address you by using {other_nodes_listener,nodename@ip} ! {FileName,FileBinary}
 % AS OF NOW RECEIVED FILES ARE NOT COMPRESSED
@@ -268,20 +319,54 @@ otherNodesListener(SavedFilesAddress) ->
 
 otherNodesListenerLoop(SavedFilesAddress) ->
   receive
-    {file_between_nodes,CompressedFileName,CompressedFile} ->
 
-      %log("Received compressed file ~s with its binary ~p", [CompressedFileName,CompressedFile]),
+    % save_file is a request from another node to store a file
+    {save_file,CompressedFileName,CompressedFile} ->
 
-      ets:insert(my_compressed_files, {CompressedFileName,""}),
-
+      % concatenate local address to file name
       NewCompressedFileName = filename:join([
           SavedFilesAddress ++
           CompressedFileName]),
 
-      %log("Now saving it to location ~s", [NewCompressedFileName]),
+      % save file
       file:write_file(NewCompressedFileName,CompressedFile),
+
       otherNodesListenerLoop(SavedFilesAddress);
+
+    % send_me_file is a request from another node to send him a file saved on local node
+    {send_me_file,FileName,OriginNode} ->
+
+      % concatenate local address to file name
+      NewFileName = filename:join([
+          SavedFilesAddress ++
+          FileName]),
+
+      % retrieve file binary
+      {ok,FileBinary} = file:read_file(NewFileName),
+
+      % send file back to requesting client
+      {other_nodes_listener,OriginNode} ! {here_is_your_file,FileName,FileBinary},
+
+      otherNodesListenerLoop(SavedFilesAddress);
+
+    % here_is_your_file is a reply from another node containing the requested file
+    {here_is_your_file,FileName,FileBinary} ->
+
+      % insert the file into sorted ets called file_pieces
+      ets:insert(file_pieces,{FileName,FileBinary}),
+
+      otherNodesListenerLoop(SavedFilesAddress);
+
     _ ->
       otherNodesListenerLoop(SavedFilesAddress)
   end.
 
+checkThatAllPiecesAreHere(RequiredSize) ->
+  case ets:info(file_pieces,size) of
+    RequiredSize ->
+      ok;
+    _ ->
+      log("files not arrived yet, going to sleep for 10 millisecs", []),
+      timer:sleep(10),
+      checkThatAllPiecesAreHere(RequiredSize)
+  end.
