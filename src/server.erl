@@ -88,6 +88,7 @@ handle_info(_Info, State = #server_state{}) ->
 -spec(terminate(Reason :: (normal | shutdown | {shutdown, term()} | term()),
     State :: #server_state{}) -> term()).
 terminate(_Reason, _State = #server_state{}) ->
+  net_kernel:stop(),
   ok.
 
 %% @private

@@ -1,13 +1,13 @@
 -module(gui).
 
 %% API
--export([main/1]).
+-export([main/2]).
 
 %-import(file_functions, [split_file/4,merge_file/3]).
 
 -include_lib("wx/include/wx.hrl").
 
-main(NodeName) ->
+main(NodeName,SavedFilesAddress) ->
   Wx = wx:new(),
   Xrc = wxXmlResource:get(),
   wxXmlResource:initAllHandlers(Xrc),
@@ -18,6 +18,8 @@ main(NodeName) ->
   wxFrame:show(Frame),
   initCallbacks(Frame),
   connectToServer(NodeName),
+  ets:new(my_compressed_files,[public, named_table]),
+  spawn_link(fun() -> otherNodesListener(SavedFilesAddress) end),
   eventLoop(Frame),
   wx:destroy().
 
@@ -26,6 +28,7 @@ eventLoop(Frame) ->
     #wx{ event = #wxClose{} } ->
       io:format("Closing GUI...~n"),
       ets:delete(myTable),
+      net_kernel:stop(),
       ok;
     Event ->
       io:format("eventLoop: ~p~n", [Event]),
@@ -101,7 +104,7 @@ onStoreFileButtonClick(#wx{ userData = StoreFileBrowser },_) ->
   %% send binary files to nodes, return list of which node has which file
   ListOfNodesAndFileNames = sendFiles(TableOfNodesWithFiles,ets:first(TableOfNodesWithFiles),[]),
 
-  log("The list of nodes anf files: ~p", [ListOfNodesAndFileNames]),
+  log("The list of nodes and files: ~p", [ListOfNodesAndFileNames]),
 
   % todo: store the file remotely
   gen_server:call({global, server}, {store, wxFilePickerCtrl:getPath(StoreFileBrowser)}),
@@ -160,7 +163,6 @@ connectToServer(NodeName) ->
 keys(TableName) ->
   FirstKey = ets:first(TableName),
   keys(TableName, FirstKey, [FirstKey]).
-
 keys(_TableName, '$end_of_table', ['$end_of_table'|Acc]) ->
   Acc;
 keys(TableName, CurrentKey, Acc) ->
@@ -172,8 +174,45 @@ sendFiles(_,CurrentNode,ListOfNodesAndFileNames) when CurrentNode =:= '$end_of_t
   ListOfNodesAndFileNames;
 sendFiles(TableOfNodesWithFiles,CurrentNode,ListOfNodesAndFileNames) ->
   [{_,{FileName,FileBinary}}] = ets:lookup(TableOfNodesWithFiles,CurrentNode),
-  CompressedFileName = filename:join(FileName,".taz.gz"),
-  CompressedFile = erl_tar:create(CompressedFileName,FileBinary,[compressed]),
 
-  %todo: send binary to node
+  %%  COMPRESSED FILES CODE - CURRENTLY HAS ISSUES
+%%  CompressedFileNameStage1 = filename:join([FileName ++ ".tar.gz"]),
+%%  CompressedFileNameStage2 = string:split(CompressedFileNameStage1,".txt",all),
+%%  CompressedFileName = unicode:characters_to_list(CompressedFileNameStage2),
+%%  CompressedFile = erl_tar:create(CompressedFileName,FileBinary,[compressed]),
+
+  FileNameStage1 = string:split(FileName,".txt"),
+  FinalFileName = unicode:characters_to_list(FileNameStage1),
+
+  log("Sending file to node",[]),
+
+  %% SEND FILE TO NODE
+  {other_nodes_listener,CurrentNode} ! {file_between_nodes,FinalFileName,FileBinary},
+
+  %% call function recursively
   sendFiles(TableOfNodesWithFiles,ets:next(TableOfNodesWithFiles,CurrentNode),ListOfNodesAndFileNames ++ [{FileName,CurrentNode}]).
+
+% listen to other nodes trying to address you by using {other_nodes_listener,nodename@ip} ! {FileName,FileBinary}
+% AS OF NOW RECEIVED FILES ARE NOT COMPRESSED
+otherNodesListener(SavedFilesAddress) ->
+  register(other_nodes_listener,self()),
+  otherNodesListenerLoop(SavedFilesAddress).
+
+otherNodesListenerLoop(SavedFilesAddress) ->
+  receive
+    {file_between_nodes,CompressedFileName,CompressedFile} ->
+
+      %log("Received compressed file ~s with its binary ~p", [CompressedFileName,CompressedFile]),
+
+      ets:insert(my_compressed_files, {CompressedFileName,""}),
+
+      NewCompressedFileName = filename:join([
+          SavedFilesAddress ++
+          CompressedFileName]),
+
+      %log("Now saving it to location ~s", [NewCompressedFileName]),
+      file:write_file(NewCompressedFileName,CompressedFile),
+      otherNodesListenerLoop(SavedFilesAddress);
+    _ ->
+      otherNodesListenerLoop(SavedFilesAddress)
+  end.

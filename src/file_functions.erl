@@ -100,16 +100,18 @@ copyFromFileToPieces(SaveOrTable,TableOfBinaries,FileName,FileInBinary, PieceSiz
       case SaveOrTable of
         save ->
           NewFileName = filename:join([
-              FileName ++
+              filename:basename(FileName) ++
               "_part_" ++
-              lists:flatten(io_lib:format("~p",[CurrentPieceIndex]))]),
+              lists:flatten(io_lib:format("~p",[CurrentPieceIndex])) ++
+              ".txt"]),
           %% write that part to the new file
           file:write_file(NewFileName, PieceFileInBinary);
         table ->
           NewFileName = filename:join([
-              FileName ++
+              filename:basename(FileName) ++
               "_part_" ++
-              lists:flatten(io_lib:format("~p",[CurrentPieceIndex]))]),
+              lists:flatten(io_lib:format("~p",[CurrentPieceIndex])) ++
+              ".txt"]),
           ets:insert(TableOfBinaries,{NewFileName,PieceFileInBinary})
       end
   end,
@@ -126,17 +128,19 @@ copyFromFileToPieces(SaveOrTable,TableOfBinaries,FileName,FileInBinary, PieceSiz
     save ->
       %% create the new file name
       NewFileName = filename:join([
-          FileName ++
+          filename:basename(FileName) ++
           "_part_" ++
-          lists:flatten(io_lib:format("~p",[CurrentPieceIndex]))]),
+          lists:flatten(io_lib:format("~p",[CurrentPieceIndex])) ++
+          ".txt"]),
       %% write that part to the new file
       file:write_file(NewFileName, PieceFileInBinary);
     table ->
       %% create the new file name
       NewFileName = filename:join([
-          FileName ++
+          filename:basename(FileName) ++
           "_part_" ++
-          lists:flatten(io_lib:format("~p",[CurrentPieceIndex]))]),
+          lists:flatten(io_lib:format("~p",[CurrentPieceIndex])) ++
+          ".txt"]),
       %% insert that part to the table
       ets:insert(TableOfBinaries,{NewFileName,PieceFileInBinary})
   end,
