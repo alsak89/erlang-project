@@ -43,23 +43,35 @@ init([]) ->
   net_kernel:start(['server@127.0.0.1', longnames]),
   % init ets table to hold storage nodes
   ets:new(storage_nodes, [public, named_table]),
+  % init ets table to hold files info
+  ets:new(files, [public, named_table]),
   % starts node listener process
   spawn(fun() -> nodesListener(self()) end),
+  % start disk monitoring
+  application:start(sasl),
+  application:start(os_mon),
   {ok, #server_state{}}.
 
 % handles store request
-handle_call({store, File}, _From, State = #server_state{}) ->
-  io:format("Server received a store request: ~s~n", [File]),
+% store record = {my_file.txt, [{my_file_1.txt, client1@IP}, {my_file_2.txt, client2@IP}]}
+handle_call({store, StoreRecord}, _From, State = #server_state{}) ->
+  io:format("Server received a store record: ~s~n", [StoreRecord]),
+  ets:insert(files, StoreRecord),
   {reply, ok, State};
 
 % handles load request
 handle_call({load, File}, _From, State = #server_state{}) ->
   io:format("Server received a load request: ~s~n", [File]),
-  {reply, ok, State};
+  {reply, ets:lookup(files, File), State};
 
 % handles request for active nodes
 handle_call(get_nodes, _From, State = #server_state{}) ->
   io:format("Server received a get_nodes request ~n"),
+  {reply, ets:tab2list(storage_nodes), State};
+
+% handles request for statistics
+handle_call(stats, _From, State = #server_state{}) ->
+  io:format("Server received a statistics request ~n"),
   {reply, ets:tab2list(storage_nodes), State}.
 
 %% @private
