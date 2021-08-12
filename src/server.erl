@@ -55,8 +55,8 @@ init([]) ->
 % handles store request
 % store record = {my_file.txt, [{my_file_1.txt, client1@IP}, {my_file_2.txt, client2@IP}]}
 handle_call({store, StoreRecord}, _From, State = #server_state{}) ->
-  io:format("Server received a store record: ~s~n", [StoreRecord]),
-  %ets:insert(files, StoreRecord),
+  io:format("Server received a store record: ~p~n", [StoreRecord]),
+  ets:insert(files, StoreRecord),
   {reply, ok, State};
 
 % handles load request

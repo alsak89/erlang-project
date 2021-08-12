@@ -10,11 +10,10 @@
 -author("יובל סער").
 
 %% API
--export([split_file/3,merge_file/3]).
+-export([split_file/3,merge_file/4]).
 
 
 -include_lib("kernel/include/file.hrl").
--include_lib("wx/include/wx.hrl").
 %%-include_lib("stdlib/include/qlc.hrl").
 
 %%%===================================================================
@@ -62,19 +61,25 @@ split_file(FileName,AmountOfPieces,SaveOrTable) ->
 %% @doc Given a list of file chunks, return the original file.
 %% The chunks and their amount is given as well as the original
 %% file name.
-merge_file(OriginalFileName,FilePiecesLocation,Amount) ->
+merge_file(OriginalFileName,FilePiecesLocationOrBinaryTable,Amount,SavedOrTable) ->
 
-  %% extract original file binaries
-  MergedFile = copyFromPiecesToFile(OriginalFileName,<<>>,FilePiecesLocation,Amount,0),
+  case SavedOrTable of
+    saved ->
+      %% extract original file binaries
+      MergedFile = copyFromPiecesToFile(OriginalFileName,<<>>,FilePiecesLocationOrBinaryTable,Amount,0);
+    table ->
+      MergedFile = piecesToFileBinary(FilePiecesLocationOrBinaryTable,ets:first(FilePiecesLocationOrBinaryTable),<<>>)
+  end,
+  MergedFile.
 
-  %% create the new file name
-  NewFileName = filename:join([FilePiecesLocation ,
-      lists:flatten(io_lib:format("~p",[OriginalFileName]))]),
-
-  % write binary to file
-  file:write_file(NewFileName,MergedFile),
-
-  ok.
+%%  %% create the new file name
+%%  NewFileName = filename:join([FilePiecesLocation ,
+%%      lists:flatten(io_lib:format("~p",[OriginalFileName]))]),
+%%
+%%  % write binary to file
+%%  file:write_file(NewFileName,MergedFile),
+%%
+%%  ok.
 
 %%%===================================================================
 %%% Internal functions
@@ -99,16 +104,19 @@ copyFromFileToPieces(SaveOrTable,TableOfBinaries,FileName,FileInBinary, PieceSiz
 
       case SaveOrTable of
         save ->
+          FinalFileName = filename:rootname(filename:basename(FileName)),
           NewFileName = filename:join([
-              filename:basename(FileName) ++
+              FinalFileName ++
               "_part_" ++
               lists:flatten(io_lib:format("~p",[CurrentPieceIndex])) ++
               ".txt"]),
+
           %% write that part to the new file
           file:write_file(NewFileName, PieceFileInBinary);
         table ->
+          FinalFileName = filename:rootname(filename:basename(FileName)),
           NewFileName = filename:join([
-              filename:basename(FileName) ++
+              FinalFileName ++
               "_part_" ++
               lists:flatten(io_lib:format("~p",[CurrentPieceIndex])) ++
               ".txt"]),
@@ -127,8 +135,9 @@ copyFromFileToPieces(SaveOrTable,TableOfBinaries,FileName,FileInBinary, PieceSiz
   case SaveOrTable of
     save ->
       %% create the new file name
+      FinalFileName = filename:rootname(filename:basename(FileName)),
       NewFileName = filename:join([
-          filename:basename(FileName) ++
+          FinalFileName ++
           "_part_" ++
           lists:flatten(io_lib:format("~p",[CurrentPieceIndex])) ++
           ".txt"]),
@@ -136,8 +145,9 @@ copyFromFileToPieces(SaveOrTable,TableOfBinaries,FileName,FileInBinary, PieceSiz
       file:write_file(NewFileName, PieceFileInBinary);
     table ->
       %% create the new file name
+      FinalFileName = filename:rootname(filename:basename(FileName)),
       NewFileName = filename:join([
-          filename:basename(FileName) ++
+          FinalFileName ++
           "_part_" ++
           lists:flatten(io_lib:format("~p",[CurrentPieceIndex])) ++
           ".txt"]),
@@ -180,3 +190,11 @@ copyFromPiecesToFile(OriginalFileName,FileInBinary, Location, AmountOfPieces, Cu
     {error,Reason} ->
       erlang:error(Reason)
   end.
+
+
+piecesToFileBinary(_,CurrentFilePieceName,FinalFileBinary) when CurrentFilePieceName =:= '$end_of_table' ->
+  FinalFileBinary;
+piecesToFileBinary(TableOfBinaries,CurrentFilePieceName,FinalFileBinary) ->
+  [{_,CurrentFilePieceBinary}]= ets:lookup(TableOfBinaries,CurrentFilePieceName),
+  NewFileInBinary = <<FinalFileBinary/binary,CurrentFilePieceBinary/binary>>,
+  piecesToFileBinary(TableOfBinaries,ets:next(TableOfBinaries,CurrentFilePieceName),NewFileInBinary).
