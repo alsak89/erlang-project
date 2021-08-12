@@ -106,7 +106,6 @@ onStoreFileButtonClick(#wx{ userData = StoreFileBrowser },_) ->
 
   log("The list of nodes and files: ~p", [ListOfNodesAndFileNames]),
 
-  % todo: store the file remotely
   gen_server:call({global, server}, {store, wxFilePickerCtrl:getPath(StoreFileBrowser)}),
   log("File stored: ~p", [wxFilePickerCtrl:getPath(StoreFileBrowser)]).
 
