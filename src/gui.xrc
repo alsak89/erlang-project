@@ -2,7 +2,7 @@
 <resource xmlns="http://www.wxwidgets.org/wxxrc" version="2.5.3.0">
 	<object class="wxFrame" name="MainFrame">
 		<style>wxDEFAULT_FRAME_STYLE|wxTAB_TRAVERSAL</style>
-		<size>600,670</size>
+		<size>600,715</size>
 		<title>BGU Distributed FIle System</title>
 		<centered>1</centered>
 		<aui_managed>0</aui_managed>
@@ -130,6 +130,133 @@
 					<auth_needed>0</auth_needed>
 					<markup>0</markup>
 					<bitmap />
+				</object>
+			</object>
+			<object class="sizeritem">
+				<option>0</option>
+				<flag>wxALL</flag>
+				<border>5</border>
+				<object class="wxButton" name="StatsButton">
+					<pos>-1,-1</pos>
+					<label>Statistics</label>
+					<default>0</default>
+					<auth_needed>0</auth_needed>
+					<markup>0</markup>
+					<bitmap />
+				</object>
+			</object>
+		</object>
+	</object>
+	<object class="wxFrame" name="StatsFrame">
+		<style>wxDEFAULT_FRAME_STYLE|wxTAB_TRAVERSAL</style>
+		<size>500,300</size>
+		<title>Statistics</title>
+		<centered>1</centered>
+		<aui_managed>0</aui_managed>
+		<object class="wxBoxSizer">
+			<orient>wxVERTICAL</orient>
+			<object class="sizeritem">
+				<option>0</option>
+				<flag>wxALL</flag>
+				<border>5</border>
+				<object class="wxStaticText" name="m_staticText4">
+					<label>Active nodes:</label>
+					<wrap>-1</wrap>
+				</object>
+			</object>
+			<object class="sizeritem">
+				<option>0</option>
+				<flag>wxALL|wxEXPAND</flag>
+				<border>5</border>
+				<object class="wxListBox" name="Nodes">
+					<style>wxLB_SINGLE</style>
+					<content>
+						<item>&lt;empty&gt;</item>
+					</content>
+				</object>
+			</object>
+			<object class="sizeritem">
+				<option>0</option>
+				<flag>wxEXPAND</flag>
+				<border>5</border>
+				<object class="wxGridBagSizer">
+					<vgap>0</vgap>
+					<hgap>0</hgap>
+					<growablecols></growablecols>
+					<growablerows></growablerows>
+					<object class="sizeritem">
+						<cellpos>0,0</cellpos>
+						<cellspan>1,1</cellspan>
+						<flag>wxALL</flag>
+						<border>5</border>
+						<object class="wxStaticText" name="m_staticText41">
+							<label>Disk space:</label>
+							<wrap>-1</wrap>
+						</object>
+					</object>
+					<object class="sizeritem">
+						<cellpos>0,1</cellpos>
+						<cellspan>1,1</cellspan>
+						<flag>wxALL|wxEXPAND</flag>
+						<border>5</border>
+						<object class="wxGauge" name="DiskSpace">
+							<style>wxGA_HORIZONTAL|wxGA_SMOOTH</style>
+							<size>300,20</size>
+							<range>100</range>
+							<value>0</value>
+						</object>
+					</object>
+				</object>
+			</object>
+			<object class="sizeritem">
+				<option>0</option>
+				<flag>wxEXPAND</flag>
+				<border>5</border>
+				<object class="wxGridBagSizer">
+					<vgap>0</vgap>
+					<hgap>0</hgap>
+					<growablecols></growablecols>
+					<growablerows></growablerows>
+					<object class="sizeritem">
+						<cellpos>0,0</cellpos>
+						<cellspan>1,1</cellspan>
+						<flag>wxALL</flag>
+						<border>5</border>
+						<object class="wxStaticText" name="m_staticText412">
+							<label>Memory:     </label>
+							<wrap>-1</wrap>
+						</object>
+					</object>
+					<object class="sizeritem">
+						<cellpos>0,1</cellpos>
+						<cellspan>1,1</cellspan>
+						<flag>wxALL|wxEXPAND</flag>
+						<border>5</border>
+						<object class="wxGauge" name="Memory">
+							<style>wxGA_HORIZONTAL|wxGA_SMOOTH</style>
+							<size>300,20</size>
+							<range>100</range>
+							<value>0</value>
+						</object>
+					</object>
+				</object>
+			</object>
+			<object class="sizeritem">
+				<option>0</option>
+				<flag>wxALL</flag>
+				<border>5</border>
+				<object class="wxStaticText" name="m_staticText411">
+					<label>Statistics:</label>
+					<wrap>-1</wrap>
+				</object>
+			</object>
+			<object class="sizeritem">
+				<option>1</option>
+				<flag>wxALL|wxEXPAND</flag>
+				<border>5</border>
+				<object class="wxTextCtrl" name="m_textCtrl3">
+					<style>wxTE_READONLY</style>
+					<value></value>
 				</object>
 			</object>
 		</object>
