@@ -22,6 +22,10 @@ main(NodeName,SavedFilesAddress) ->
   initStatFrameCallbacks(StatsFrame),
   connectToServer(NodeName),
   ets:new(my_compressed_files,[public, named_table]),
+  % ets table for transferred files counters
+  ets:new(countersTable,[named_table, set, public]),
+  ets:insert(countersTable, {received,0}),
+  ets:insert(countersTable, {sent,0}),
   spawn_link(fun() -> otherNodesListener(SavedFilesAddress) end),
   eventLoop(MainFrame),
   wx:destroy().
@@ -77,6 +81,7 @@ initMainFrameCallbacks(MainFrame, StatsFrame) ->
   ok.
 
 onStoreFileButtonClick(#wx{ userData = StoreFileBrowser },_) ->
+  incrSentCounter(),
   {ListOfNodes,AmountOfNodes} = gen_server:call({global, server},get_nodes),
   %io:format("Received nodes from server: ~p~n,", Nodes),
 
@@ -117,6 +122,7 @@ onStoreFileButtonClick(#wx{ userData = StoreFileBrowser },_) ->
   log("File stored: ~p", [wxFilePickerCtrl:getPath(StoreFileBrowser)]).
 
 onLoadFileButtonClick(#wx{ userData = {LoadFileBrowser, TextEditor} },_) ->
+  incrRecvCounter(),
   %todo: load file remotely
   % read contents of the file
   Path = wxFilePickerCtrl:getPath(LoadFileBrowser),
@@ -185,6 +191,7 @@ initFrame(Name) ->
   wxFrame:setMinSize(Frame, { 400, 200 }),
   Frame.
 
+% functions to get local stats from clients
 getDiskStats() ->
   DiskInfo = disksup:get_disk_data(),
   RootPartition = [{Bytes,Percent} || {"/",Bytes,Percent} <- DiskInfo],
@@ -195,8 +202,12 @@ getMemoryStats() ->
   NeededInfo = lists:sublist(MemoryInfo, 6, 2),
   NeededInfo.
 
+getFilesStats() ->
+  Received = ets:lookup_element(countersTable, received, 2),
+  Sent = ets:lookup_element(countersTable, sent, 2),
+  {Received, Sent}.
 
-onNodeSelection(#wx{ userData = {Nodes, DiskSpace, Memory }},_) ->
+onNodeSelection(#wx{ userData = {Nodes, DiskSpace, Memory, Stats }},_) ->
   SelectedNode = wxListBox:getStringSelection(Nodes),
   TrimmedNode = string:substr(SelectedNode,2, length(SelectedNode)-2),
   % get disk info
@@ -210,8 +221,11 @@ onNodeSelection(#wx{ userData = {Nodes, DiskSpace, Memory }},_) ->
   FreeMemoryNum = element(2, FreeMemoryTuple),
   TotalMemoryNum = element(2, TotalMemoryTuple),
   UsedMemory = TotalMemoryNum - FreeMemoryNum,
-  io:format("Used mem: ~p~n", [UsedMemory]),
-  wxGauge:setValue(Memory, round(UsedMemory/TotalMemoryNum*100)).
+  wxGauge:setValue(Memory, round(UsedMemory/TotalMemoryNum*100)),
+  % print file counter
+
+
+
 
 initStatFrameCallbacks(StatsFrame) ->
   % get elements
@@ -221,7 +235,7 @@ initStatFrameCallbacks(StatsFrame) ->
   Stats = wxXmlResource:xrcctrl(StatsFrame, "Stats", wxTextCtrl),
   % init callbacks
   wxListBox:connect(Nodes, command_listbox_selected,
-    [{callback, fun onNodeSelection/2}, {userData, {Nodes, DiskSpace, Memory}}]).
+    [{callback, fun onNodeSelection/2}, {userData, {Nodes, DiskSpace, Memory, Stats}}]).
 
 connectToServer(NodeName) ->
   net_kernel:start([NodeName, longnames]),
@@ -285,4 +299,14 @@ otherNodesListenerLoop(SavedFilesAddress) ->
     _ ->
       otherNodesListenerLoop(SavedFilesAddress)
   end.
+
+% increment recv counter
+incrRecvCounter()->
+  ets:update_counter(countersTable, received, {2,1}).
+
+% increment sent counter
+incrSentCounter()->
+  ets:update_counter(countersTable, sent, {2,1}).
+
+
 
