@@ -44,7 +44,7 @@ init([]) ->
   % init ets table to hold storage nodes
   ets:new(storage_nodes, [public, named_table]),
   % init ets table to hold files info
-  ets:new(files, [public, named_table]),
+  ets:new(files, [public, named_table, bag]),
   % starts node listener process
   spawn(fun() -> nodesListener(self()) end),
   % start disk monitoring
@@ -62,7 +62,7 @@ handle_call({store, StoreRecord}, _From, State = #server_state{}) ->
 % handles load request
 handle_call({load, File}, _From, State = #server_state{}) ->
   io:format("Server received a load request: ~s~n", [File]),
-  {reply, ets:lookup(files, File), State};
+  {reply, lists:nth(1,ets:lookup(files, File)), State};
 
 % handles request for active nodes
 handle_call(get_nodes, _From, State = #server_state{}) ->
@@ -72,7 +72,25 @@ handle_call(get_nodes, _From, State = #server_state{}) ->
 % handles request for statistics
 handle_call(stats, _From, State = #server_state{}) ->
   io:format("Server received a statistics request ~n"),
-  {reply, {ets:tab2list(storage_nodes),ets:info(storage_nodes,size)}, State}.
+  {reply, {ets:tab2list(storage_nodes),ets:info(storage_nodes,size)}, State};
+
+% handles request for files in system
+handle_call(get_files, _From, State = #server_state{}) ->
+  io:format("Server received a get_files request ~n"),
+  {reply, {ets:tab2list(files),ets:info(files,size)}, State};
+
+% handles delete request
+handle_call({delete,File}, _From, State = #server_state{}) ->
+  io:format("Server received a delete request of file ~s ~n",[File]),
+  [{_,FilesToDelete}] = ets:lookup(files, File),
+  ets:delete(files,File),
+  {reply,FilesToDelete, State};
+
+% handles delete request
+handle_call({node_closing,Node}, _From, State = #server_state{}) ->
+  io:format("Server received a node_closing request from node ~s ~n",[Node]),
+  %todo: handle redistribution of files in server side
+  {reply, ok, State}.
 
 %% @private
 %% @doc Handling cast messages
