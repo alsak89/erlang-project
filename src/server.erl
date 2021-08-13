@@ -82,14 +82,15 @@ handle_call(get_files, _From, State = #server_state{}) ->
 % handles delete request
 handle_call({delete,File}, _From, State = #server_state{}) ->
   io:format("Server received a delete request of file ~s ~n",[File]),
-  [{_,FilesToDelete}] = ets:lookup(files, File),
+  [{_,FilesToDelete1},{_,FilesToDelete2}] = ets:lookup(files, File),
   ets:delete(files,File),
-  {reply,FilesToDelete, State};
+  {reply,{FilesToDelete1,FilesToDelete2}, State};
 
-% handles delete request
+% handles node_closing request
 handle_call({node_closing,Node}, _From, State = #server_state{}) ->
   io:format("Server received a node_closing request from node ~s ~n",[Node]),
   %todo: handle redistribution of files in server side
+  rearrangeFiles(Node),
   {reply, ok, State}.
 
 %% @private
@@ -147,3 +148,83 @@ nodesListener(ServerPid) ->
       ets:delete(storage_nodes, Node),
       nodesListener(ServerPid)
   end.
+
+%% WORK IN PROGRESS - FUNCTIONS TO CHANGE SERVER DATABASE WHEN A NODE DIES OR LEAVES SYSTEM
+rearrangeFiles(DeadNode) ->
+  ets:new(temp,[bag,named_table,public]),
+  rearrangeFileTable(files,ets:first(files),temp,DeadNode),
+  ets:delete(files),
+  ets:rename(temp,files),
+  ok.
+
+rearrangeFileTable(_,CurrentFile,_,_) when CurrentFile =:= '$end_of_table' -> ok;
+rearrangeFileTable(OldTable,CurrentFile,NewTable,DeadNode) ->
+  [{_,FileListWithNodes1},{_,FileListWithNodes2}] = ets:lookup(OldTable,CurrentFile),
+
+  {DeadNodeList1,OtherNodesList1} = separateFileLists(FileListWithNodes1,DeadNode,[],[]),
+
+  NewFileListWithNodes1 = OtherNodesList1 ++ findTwoNodesToSendFilesAndTellThemToSend(DeadNodeList1,FileListWithNodes2,[]),
+
+  {DeadNodeList2,OtherNodesList2} = separateFileLists(FileListWithNodes2,DeadNode,[],[]),
+
+  NewFileListWithNodes2 = OtherNodesList2 ++ findTwoNodesToSendFilesAndTellThemToSend(DeadNodeList2,FileListWithNodes1,[]),
+
+  ets:insert(NewTable,[{CurrentFile,NewFileListWithNodes1},{CurrentFile,NewFileListWithNodes2}]),
+
+  rearrangeFileTable(OldTable,ets:next(OldTable,CurrentFile),NewTable,DeadNode).
+
+  %ListOfFilesAtDeadNode1 = [File || {File, DeadNode} <- FileListWithNodes1],
+  %lists:map(fun({_,Node}) -> Node when Node =/= DeadNode end,
+%%  case lists:keytake(DeadNode,2,FileListWithNodes1) of
+%%    false ->
+%%      ok;
+%%    {value,{FilePiece,_},FileListWithNodes1WithoutDeadNode} ->
+%%      ok
+%%  end.
+
+%% separate file list to 2 lists containing files that were on dead node and files that wern't
+separateFileLists([],_,DeadNodeList,OtherNodesList) ->
+  {DeadNodeList,OtherNodesList};
+separateFileLists([H|T],DeadNode,DeadNodeList,OtherNodesList) ->
+  case H of
+    {_,DeadNode} ->
+      separateFileLists(T,DeadNode,DeadNodeList ++ [H],OtherNodesList);
+    _ ->
+      separateFileLists(T,DeadNode,DeadNodeList,OtherNodesList ++ [H])
+  end.
+
+%% given a file and a dead node and a list, find a different node containing that file.
+findAnotherNodeWithFile(_,[],_) -> none;
+findAnotherNodeWithFile(File,[H|T],DeadNode) ->
+  case H of
+    {_,DeadNode} ->
+      findAnotherNodeWithFile(File,T,DeadNode);
+    {File,NewNode} ->
+      NewNode;
+    _ ->
+      findAnotherNodeWithFile(File,T,DeadNode)
+  end.
+
+%% given a file and a dead node and a list, find a different node not containing that file.
+findAnotherNodeNotWithFile(_,[],_) -> none;
+findAnotherNodeNotWithFile(File,[H|T],DeadNode) ->
+  case H of
+    {_,DeadNode} ->
+      findAnotherNodeNotWithFile(File,T,DeadNode);
+    {File,_} ->
+      findAnotherNodeNotWithFile(File,T,DeadNode);
+    {_,NewNode} ->
+      NewNode
+  end.
+
+%% given a list of dead node tuples and the other file list, find
+%% another node which has the dead node file and another node
+%% which doesn't, tell them to send the file to each other and
+%% return a list with the new file locations.
+findTwoNodesToSendFilesAndTellThemToSend([],_, NewFileList) -> NewFileList;
+findTwoNodesToSendFilesAndTellThemToSend([H|T],FileListWithNodes, NewFileList) ->
+  {File,DeadNode} = H,
+  SenderNode = findAnotherNodeWithFile(File,FileListWithNodes,DeadNode),
+  RecieverNode = findAnotherNodeNotWithFile(File,FileListWithNodes,DeadNode),
+  {other_nodes_listener,SenderNode} ! {server_said_send_file,File,RecieverNode},
+  findTwoNodesToSendFilesAndTellThemToSend(T,FileListWithNodes,NewFileList ++ [{File,RecieverNode}]).

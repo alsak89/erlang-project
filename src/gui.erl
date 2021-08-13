@@ -11,11 +11,15 @@
 -import(file_functions, [split_file/4,merge_file/3]).
 
 main(NodeName,SavedFilesAddress) ->
+
+  % save file address in ets so listening process get it
   ets:new(general_node_ets,[named_table,public]),
   ets:insert(general_node_ets,{file_address,SavedFilesAddress}),
+
   % start disk monitoring
   application:start(sasl),
   application:start(os_mon),
+
   % init gui
   MainFrame = initFrame("MainFrame"),
   wxFrame:show(MainFrame),
@@ -23,7 +27,6 @@ main(NodeName,SavedFilesAddress) ->
   initMainFrameCallbacks(MainFrame, StatsFrame),
   initStatFrameCallbacks(StatsFrame),
   connectToServer(NodeName),
-  ets:new(my_compressed_files,[public, named_table]),
   % ets table for transferred files counters
   ets:new(countersTable,[named_table, set, public]),
   ets:insert(countersTable, {received,0}),
@@ -96,15 +99,6 @@ initMainFrameCallbacks(MainFrame, StatsFrame) ->
 
 onStoreFileButtonClick(#wx{ userData = StoreFileBrowser },_) ->
   incrSentCounter(),
-  {ListOfNodes,AmountOfNodes} = gen_server:call({global, server},get_nodes),
-  %io:format("Received nodes from server: ~p~n,", Nodes),
-
-  NodesTable = ets:new(nodes_table,[]),
-  ets:insert(NodesTable,ListOfNodes),
-
-  log("The table of only nodes: ~p", [NodesTable]),
-
-  ListOfOnlyNodes = keys(NodesTable),
 
   OriginalFileNameWithPath = wxFilePickerCtrl:getPath(StoreFileBrowser),
 
@@ -387,6 +381,21 @@ otherNodesListenerLoop(SavedFilesAddress) ->
 
       otherNodesListenerLoop(SavedFilesAddress);
 
+    %% server_said_send_file is a request from server to send a file to a different node
+    %% following a node disconnection(peacefully or not)
+    {server_said_send_file,FileName,RecipientNode} ->
+
+      % concatenate local address to file name
+      NewFileName = filename:join([
+          SavedFilesAddress ++
+          FileName]),
+
+      % retrieve file binary
+      {ok,FileBinary} = file:read_file(NewFileName),
+
+      % send file to recipient node
+      {other_nodes_listener,RecipientNode} ! {save_file,FileName,FileBinary};
+
     _ ->
       otherNodesListenerLoop(SavedFilesAddress)
   end.
@@ -410,17 +419,22 @@ checkThatAllPiecesAreHere(RequiredSize) ->
       checkThatAllPiecesAreHere(RequiredSize)
   end.
 
+deleteFilesHelper(ListOfFilePiecesWithNodes) ->
+  %% send request to other nodes to delete file pieces
+  TableOfFilePiecesWithNodes = ets:new(temp_ets,[]),
+  ets:insert(TableOfFilePiecesWithNodes,ListOfFilePiecesWithNodes),
+  deleteFiles(TableOfFilePiecesWithNodes,ets:first(TableOfFilePiecesWithNodes)),
+  ets:delete(TableOfFilePiecesWithNodes).
+
 % given a file name without path, delete it from system(assumes it exists)
 deleteFileFromSystem(OriginalFileName) ->
   %% request file pieces locations from server for deletion
-  ListOfFilePiecesWithNodes2 = gen_server:call({global, server}, {delete, OriginalFileName}),
+  {ListOfFilePiecesWithNodes1,ListOfFilePiecesWithNodes2} = gen_server:call({global, server}, {delete, OriginalFileName}),
   %log("Requested info for file ~s from server, received: ~p", [OriginalFileName,ListOfFilePiecesWithNodes2]),
 
-  %% send request to other nodes to delete file pieces
-  TableOfFilePiecesWithNodes2 = ets:new(temp_ets,[]),
-  ets:insert(TableOfFilePiecesWithNodes2,ListOfFilePiecesWithNodes2),
-  deleteFiles(TableOfFilePiecesWithNodes2,ets:first(TableOfFilePiecesWithNodes2)),
-  ets:delete(TableOfFilePiecesWithNodes2),
+  deleteFilesHelper(ListOfFilePiecesWithNodes1),
+  deleteFilesHelper(ListOfFilePiecesWithNodes2),
+
   %log("File ~s deleted succesfuly from system", [OriginalFileName,ListOfFilePiecesWithNodes2]),
   ok.
 
@@ -511,7 +525,7 @@ onAllFilesButtonClick(#wx{ userData = AllFiles },_) ->
   FilesSummary = gen_server:call({global, server}, get_files),
   FileInfosList = element(1, FilesSummary),
   FileNames = [Name || {Name, _} <- FileInfosList],
-  wxListBox:set(AllFiles, FileNames).
+  wxListBox:set(AllFiles, lists:usort(FileNames)).
 
 onDeleteButtonClick(#wx{ userData = AllFiles },_) ->
   Selection = wxListBox:getStringSelection(AllFiles),

@@ -115,12 +115,15 @@ copyFromFileToPieces(SaveOrTable,TableOfBinaries,FileName,FileInBinary, PieceSiz
           file:write_file(NewFileName, PieceFileInBinary);
         table ->
           FinalFileName = filename:rootname(filename:basename(FileName)),
-          NewFileName = filename:join([
+          LastFileNameFromTable = filename:join([
               FinalFileName ++
               "_part_" ++
-              lists:flatten(io_lib:format("~p",[CurrentPieceIndex])) ++
+              lists:flatten(io_lib:format("~p",[CurrentPieceIndex-1])) ++
               ".txt"]),
-          ets:insert(TableOfBinaries,{NewFileName,PieceFileInBinary})
+
+          %% add leftover to last file to avoid information loss
+          [{_,LastFileBinary}] = ets:lookup(TableOfBinaries,LastFileNameFromTable),
+          ets:update_element(TableOfBinaries,LastFileNameFromTable,{1,<<LastFileBinary,PieceFileInBinary>>})
       end
   end,
   TableOfBinaries;
