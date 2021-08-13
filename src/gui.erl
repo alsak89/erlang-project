@@ -59,10 +59,14 @@ initMainFrameCallbacks(MainFrame, StatsFrame) ->
   Logger = wxXmlResource:xrcctrl(MainFrame, "Logger", wxTextCtrl),
   ClearLoggerButton = wxXmlResource:xrcctrl(MainFrame, "ClearLoggerButton", wxButton),
   StatsButton = wxXmlResource:xrcctrl(MainFrame, "StatsButton", wxButton),
+  AllFilesButton = wxXmlResource:xrcctrl(MainFrame, "AllFilesButton", wxButton),
+  AllFiles = wxXmlResource:xrcctrl(MainFrame, "AllFiles", wxListBox),
+  DeleteButton = wxXmlResource:xrcctrl(MainFrame, "DeleteButton", wxButton),
   % disable some elements
   wxButton:disable(UpdateFileButton),
   wxTextCtrl:disable(TextEditor),
   wxTextCtrl:disable(Logger),
+  wxButton:disable(DeleteButton),
   % put logger in ets table
   ets:new(myTable, [public, named_table]),
   ets:insert(myTable, {logger, Logger}),
@@ -82,6 +86,12 @@ initMainFrameCallbacks(MainFrame, StatsFrame) ->
     [{callback, fun onClearLoggerButtonClick/2}, {userData, Logger}]),
   wxButton:connect(StatsButton, command_button_clicked,
     [{callback, fun onStatsButtonClick/2}, {userData, StatsFrame}]),
+  wxButton:connect(AllFilesButton, command_button_clicked,
+    [{callback, fun onAllFilesButtonClick/2}, {userData, AllFiles}]),
+  wxButton:connect(DeleteButton, command_button_clicked,
+    [{callback, fun onDeleteButtonClick/2}, {userData, AllFiles}]),
+  wxListBox:connect(AllFiles, command_listbox_selected,
+    [{callback, fun onFileSelection/2}, {userData, DeleteButton}]),
   ok.
 
 onStoreFileButtonClick(#wx{ userData = StoreFileBrowser },_) ->
@@ -159,6 +169,10 @@ onStatsButtonClick(#wx{ userData = StatsFrame },_) ->
   wxFrame:show(StatsFrame),
   % grab nodes list
   Nodes = wxXmlResource:xrcctrl(StatsFrame, "Nodes", wxListBox),
+  updateActiveNodes(Nodes).
+
+% updates active nodes list in stats frame
+updateActiveNodes(Nodes) ->
   {ActiveNodes, _} = gen_server:call({global, server}, get_nodes),
   % get list of node names and put them in list box
   NodeNames = [erl_types:atom_to_string(Name) || {Name, _} <- ActiveNodes],
@@ -214,9 +228,12 @@ initStatFrameCallbacks(StatsFrame) ->
   DiskSpace = wxXmlResource:xrcctrl(StatsFrame, "DiskSpace", wxGauge),
   Memory = wxXmlResource:xrcctrl(StatsFrame, "Memory", wxGauge),
   Stats = wxXmlResource:xrcctrl(StatsFrame, "Stats", wxTextCtrl),
+  RefreshButton = wxXmlResource:xrcctrl(StatsFrame, "RefreshButton", wxButton),
   % init callbacks
   wxListBox:connect(Nodes, command_listbox_selected,
-    [{callback, fun onNodeSelection/2}, {userData, {Nodes, DiskSpace, Memory, Stats}}]).
+    [{callback, fun onNodeSelection/2}, {userData, {Nodes, DiskSpace, Memory, Stats}}]),
+  wxButton:connect(RefreshButton, command_button_clicked,
+    [{callback, fun onRefreshButtonClicked/2}, {userData, Nodes}]).
 
 connectToServer(NodeName) ->
   net_kernel:start([NodeName, longnames]),
@@ -397,14 +414,14 @@ checkThatAllPiecesAreHere(RequiredSize) ->
 deleteFileFromSystem(OriginalFileName) ->
   %% request file pieces locations from server for deletion
   ListOfFilePiecesWithNodes2 = gen_server:call({global, server}, {delete, OriginalFileName}),
-  log("Requested info for file ~s from server, received: ~p", [OriginalFileName,ListOfFilePiecesWithNodes2]),
+  %log("Requested info for file ~s from server, received: ~p", [OriginalFileName,ListOfFilePiecesWithNodes2]),
 
   %% send request to other nodes to delete file pieces
   TableOfFilePiecesWithNodes2 = ets:new(temp_ets,[]),
   ets:insert(TableOfFilePiecesWithNodes2,ListOfFilePiecesWithNodes2),
   deleteFiles(TableOfFilePiecesWithNodes2,ets:first(TableOfFilePiecesWithNodes2)),
   ets:delete(TableOfFilePiecesWithNodes2),
-  log("File ~s deleted succesfuly from system", [OriginalFileName,ListOfFilePiecesWithNodes2]),
+  %log("File ~s deleted succesfuly from system", [OriginalFileName,ListOfFilePiecesWithNodes2]),
   ok.
 
 % given a file name without path, load it from the system and save it locally
@@ -487,3 +504,19 @@ storeFileInSystem(OriginalFileNameWithPath) ->
   gen_server:call({global, server}, {store, [{OriginalFileName,SecondListOfNodesAndFileNames}]}),
   log("File stored: ~p", [OriginalFileName]).
 
+onRefreshButtonClicked(#wx{ userData = Nodes },_) ->
+  updateActiveNodes(Nodes).
+
+onAllFilesButtonClick(#wx{ userData = AllFiles },_) ->
+  FilesSummary = gen_server:call({global, server}, get_files),
+  FileInfosList = element(1, FilesSummary),
+  FileNames = [Name || {Name, _} <- FileInfosList],
+  wxListBox:set(AllFiles, FileNames).
+
+onDeleteButtonClick(#wx{ userData = AllFiles },_) ->
+  Selection = wxListBox:getStringSelection(AllFiles),
+  deleteFileFromSystem(Selection).
+
+
+onFileSelection(#wx{ userData = DeleteButton },_) ->
+  wxButton:enable(DeleteButton).
