@@ -9,14 +9,11 @@
 		<object class="wxBoxSizer">
 			<orient>wxVERTICAL</orient>
 			<object class="sizeritem">
-				<option>1</option>
+				<option>0</option>
 				<flag>wxEXPAND</flag>
 				<border>5</border>
-				<object class="wxGridSizer">
-					<rows>0</rows>
-					<cols>2</cols>
-					<vgap>0</vgap>
-					<hgap>0</hgap>
+				<object class="wxBoxSizer">
+					<orient>wxVERTICAL</orient>
 					<object class="sizeritem">
 						<option>0</option>
 						<flag>wxALL</flag>
@@ -28,7 +25,7 @@
 					</object>
 					<object class="sizeritem">
 						<option>0</option>
-						<flag>wxBOTTOM|wxRIGHT|wxLEFT|wxEXPAND</flag>
+						<flag>wxEXPAND</flag>
 						<border>5</border>
 						<object class="wxFilePickerCtrl" name="StoreFileBrowser">
 							<value></value>
@@ -37,31 +34,31 @@
 							<style>wxFLP_DEFAULT_STYLE</style>
 						</object>
 					</object>
+					<object class="sizeritem">
+						<option>0</option>
+						<flag>wxALL</flag>
+						<border>5</border>
+						<object class="wxButton" name="StoreFileButton">
+							<label>Store File</label>
+							<default>0</default>
+							<auth_needed>0</auth_needed>
+							<markup>0</markup>
+							<bitmap />
+						</object>
+					</object>
+					<object class="sizeritem">
+						<option>0</option>
+						<flag>wxEXPAND | wxALL</flag>
+						<border>5</border>
+						<object class="wxStaticLine" name="m_staticline1">
+							<style>wxLI_HORIZONTAL</style>
+						</object>
+					</object>
 				</object>
 			</object>
 			<object class="sizeritem">
 				<option>0</option>
-				<flag>wxALL</flag>
-				<border>5</border>
-				<object class="wxButton" name="StoreFileButton">
-					<label>Store File</label>
-					<default>0</default>
-					<auth_needed>0</auth_needed>
-					<markup>0</markup>
-					<bitmap />
-				</object>
-			</object>
-			<object class="sizeritem">
-				<option>0</option>
-				<flag>wxEXPAND | wxALL</flag>
-				<border>5</border>
-				<object class="wxStaticLine" name="m_staticline1">
-					<style>wxLI_HORIZONTAL</style>
-				</object>
-			</object>
-			<object class="sizeritem">
-				<option>1</option>
-				<flag>wxEXPAND</flag>
+				<flag>wxTOP</flag>
 				<border>5</border>
 				<object class="wxGridSizer">
 					<rows>0</rows>
@@ -72,82 +69,9 @@
 						<option>0</option>
 						<flag>wxALL</flag>
 						<border>5</border>
-						<object class="wxStaticText" name="m_staticText11">
-							<label>Select a file to load:</label>
-							<wrap>-1</wrap>
-						</object>
-					</object>
-					<object class="sizeritem">
-						<option>0</option>
-						<flag>wxALL|wxEXPAND</flag>
-						<border>5</border>
-						<object class="wxFilePickerCtrl" name="LoadFileBrowser">
-							<value></value>
-							<message>Select a file</message>
-							<wildcard>*.*</wildcard>
-							<style>wxFLP_DEFAULT_STYLE</style>
-						</object>
-					</object>
-				</object>
-			</object>
-			<object class="sizeritem">
-				<option>0</option>
-				<flag>wxALL</flag>
-				<border>5</border>
-				<object class="wxButton" name="LoadFileButton">
-					<label>Load File</label>
-					<default>0</default>
-					<auth_needed>0</auth_needed>
-					<markup>0</markup>
-					<bitmap />
-				</object>
-			</object>
-			<object class="sizeritem">
-				<option>0</option>
-				<flag>wxTOP|wxRIGHT|wxLEFT|wxEXPAND</flag>
-				<border>5</border>
-				<object class="wxTextCtrl" name="TextEditor">
-					<style>wxTE_MULTILINE|wxTE_PROCESS_ENTER</style>
-					<size>200,100</size>
-					<value></value>
-				</object>
-			</object>
-			<object class="sizeritem">
-				<option>0</option>
-				<flag>wxALL</flag>
-				<border>5</border>
-				<object class="wxButton" name="UpdateFileButton">
-					<label>Update File</label>
-					<default>0</default>
-					<auth_needed>0</auth_needed>
-					<markup>0</markup>
-					<bitmap />
-				</object>
-			</object>
-			<object class="sizeritem">
-				<option>0</option>
-				<flag>wxEXPAND | wxALL</flag>
-				<border>5</border>
-				<object class="wxStaticLine" name="m_staticline11">
-					<style>wxLI_HORIZONTAL</style>
-				</object>
-			</object>
-			<object class="sizeritem">
-				<option>1</option>
-				<flag>wxTOP|wxEXPAND</flag>
-				<border>5</border>
-				<object class="wxGridSizer">
-					<rows>0</rows>
-					<cols>2</cols>
-					<vgap>0</vgap>
-					<hgap>0</hgap>
-					<object class="sizeritem">
-						<option>1</option>
-						<flag>wxALL|wxEXPAND</flag>
-						<border>5</border>
 						<object class="wxListBox" name="AllFiles">
 							<style>wxLB_SINGLE</style>
-							<size>200,150</size>
+							<size>285,100</size>
 							<content>
 								<item>&lt;empty&gt;</item>
 							</content>
@@ -165,6 +89,17 @@
 							<bitmap />
 						</object>
 					</object>
+				</object>
+			</object>
+			<object class="sizeritem">
+				<option>0</option>
+				<flag></flag>
+				<border>5</border>
+				<object class="wxGridSizer">
+					<rows>0</rows>
+					<cols>2</cols>
+					<vgap>0</vgap>
+					<hgap>0</hgap>
 					<object class="sizeritem">
 						<option>0</option>
 						<flag>wxALL|wxALIGN_RIGHT</flag>
@@ -177,6 +112,51 @@
 							<bitmap />
 						</object>
 					</object>
+					<object class="sizeritem">
+						<option>0</option>
+						<flag>wxALL</flag>
+						<border>5</border>
+						<object class="wxButton" name="LoadFileButton">
+							<label>Load File</label>
+							<default>0</default>
+							<auth_needed>0</auth_needed>
+							<markup>0</markup>
+							<bitmap />
+						</object>
+					</object>
+				</object>
+			</object>
+			<object class="sizeritem">
+				<option>1</option>
+				<flag>wxEXPAND</flag>
+				<border>5</border>
+				<object class="wxGridSizer">
+					<rows>0</rows>
+					<cols>2</cols>
+					<vgap>0</vgap>
+					<hgap>0</hgap>
+				</object>
+			</object>
+			<object class="sizeritem">
+				<option>0</option>
+				<flag>wxTOP|wxRIGHT|wxLEFT|wxEXPAND</flag>
+				<border>5</border>
+				<object class="wxTextCtrl" name="TextEditor">
+					<style>wxTE_MULTILINE|wxTE_PROCESS_ENTER</style>
+					<size>200,150</size>
+					<value></value>
+				</object>
+			</object>
+			<object class="sizeritem">
+				<option>0</option>
+				<flag>wxALL</flag>
+				<border>5</border>
+				<object class="wxButton" name="UpdateFileButton">
+					<label>Update File</label>
+					<default>0</default>
+					<auth_needed>0</auth_needed>
+					<markup>0</markup>
+					<bitmap />
 				</object>
 			</object>
 			<object class="sizeritem">
@@ -237,7 +217,7 @@
 	</object>
 	<object class="wxFrame" name="StatsFrame">
 		<style>wxDEFAULT_FRAME_STYLE|wxTAB_TRAVERSAL</style>
-		<size>500,300</size>
+		<size>500,420</size>
 		<title>Statistics</title>
 		<centered>1</centered>
 		<aui_managed>0</aui_managed>
@@ -331,10 +311,18 @@
 			</object>
 			<object class="sizeritem">
 				<option>0</option>
+				<flag>wxEXPAND | wxALL</flag>
+				<border>5</border>
+				<object class="wxStaticLine" name="m_staticline12">
+					<style>wxLI_HORIZONTAL</style>
+				</object>
+			</object>
+			<object class="sizeritem">
+				<option>0</option>
 				<flag>wxALL</flag>
 				<border>5</border>
 				<object class="wxStaticText" name="m_staticText411">
-					<label>Statistics:</label>
+					<label>Overall Statistics:</label>
 					<wrap>-1</wrap>
 				</object>
 			</object>
@@ -342,21 +330,45 @@
 				<option>1</option>
 				<flag>wxALL|wxEXPAND</flag>
 				<border>5</border>
-				<object class="wxTextCtrl" name="m_textCtrl3">
-					<style>wxTE_READONLY</style>
+				<object class="wxTextCtrl" name="Stats">
+					<style>wxTE_MULTILINE|wxTE_READONLY</style>
+					<size>200,150</size>
 					<value></value>
 				</object>
 			</object>
 			<object class="sizeritem">
 				<option>0</option>
-				<flag>wxALL</flag>
+				<flag>wxEXPAND</flag>
 				<border>5</border>
-				<object class="wxButton" name="RefreshButton">
-					<label>Refresh</label>
-					<default>0</default>
-					<auth_needed>0</auth_needed>
-					<markup>0</markup>
-					<bitmap />
+				<object class="wxGridSizer">
+					<rows>0</rows>
+					<cols>2</cols>
+					<vgap>0</vgap>
+					<hgap>0</hgap>
+					<object class="sizeritem">
+						<option>1</option>
+						<flag>wxALL</flag>
+						<border>5</border>
+						<object class="wxButton" name="RefreshButton">
+							<label>Refresh</label>
+							<default>0</default>
+							<auth_needed>0</auth_needed>
+							<markup>0</markup>
+							<bitmap />
+						</object>
+					</object>
+					<object class="sizeritem">
+						<option>1</option>
+						<flag>wxALL|wxALIGN_RIGHT</flag>
+						<border>5</border>
+						<object class="wxButton" name="StatsCloseButton">
+							<label>Close</label>
+							<default>0</default>
+							<auth_needed>0</auth_needed>
+							<markup>0</markup>
+							<bitmap />
+						</object>
+					</object>
 				</object>
 			</object>
 		</object>
