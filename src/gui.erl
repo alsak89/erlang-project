@@ -20,14 +20,10 @@ main(NodeName,SavedFilesAddress) ->
   MainFrame = initFrame("MainFrame"),
   wxFrame:show(MainFrame),
   StatsFrame = initFrame("StatsFrame"),
-  initMainFrameCallbacks(MainFrame, StatsFrame),
+  initMainFrameCallbacks(MainFrame, StatsFrame, SavedFilesAddress),
   initStatFrameCallbacks(StatsFrame),
   connectToServer(NodeName),
   ets:new(my_compressed_files,[public, named_table]),
-  % ets table for transferred files counters
-  ets:new(countersTable,[named_table, set, public]),
-  ets:insert(countersTable, {received,0}),
-  ets:insert(countersTable, {sent,0}),
   spawn_link(fun() -> otherNodesListener(SavedFilesAddress) end),
   eventLoop(MainFrame),
   wx:destroy().
@@ -46,13 +42,13 @@ eventLoop(Frame) ->
       eventLoop(Frame)
   end.
 
-initMainFrameCallbacks(MainFrame, StatsFrame) ->
+initMainFrameCallbacks(MainFrame, StatsFrame, SavedFilesAddress) ->
   % subscribe to window close event
   wxFrame:connect(MainFrame, close_window),
   % grab gui elements
   StoreFileBrowser = wxXmlResource:xrcctrl(MainFrame, "StoreFileBrowser", wxFilePickerCtrl),
   StoreFileButton = wxXmlResource:xrcctrl(MainFrame, "StoreFileButton", wxButton),
-  LoadFileBrowser = wxXmlResource:xrcctrl(MainFrame, "LoadFileBrowser", wxFilePickerCtrl),
+  %LoadFileBrowser = wxXmlResource:xrcctrl(MainFrame, "LoadFileBrowser", wxFilePickerCtrl),
   LoadFileButton = wxXmlResource:xrcctrl(MainFrame, "LoadFileButton", wxButton),
   TextEditor = wxXmlResource:xrcctrl(MainFrame, "TextEditor", wxTextCtrl),
   UpdateFileButton = wxXmlResource:xrcctrl(MainFrame, "UpdateFileButton", wxButton),
@@ -67,6 +63,7 @@ initMainFrameCallbacks(MainFrame, StatsFrame) ->
   wxTextCtrl:disable(TextEditor),
   wxTextCtrl:disable(Logger),
   wxButton:disable(DeleteButton),
+  wxButton:disable(LoadFileButton),
   % put logger in ets table
   ets:new(myTable, [public, named_table]),
   ets:insert(myTable, {logger, Logger}),
@@ -77,11 +74,11 @@ initMainFrameCallbacks(MainFrame, StatsFrame) ->
       { userData, StoreFileBrowser }]),
   wxButton:connect(LoadFileButton, command_button_clicked,
     [{ callback, fun onLoadFileButtonClick/2 },
-      { userData, {LoadFileBrowser, TextEditor} }]),
+      { userData, {AllFiles, TextEditor, SavedFilesAddress} }]),
   wxTextCtrl:connect(TextEditor, command_text_updated,
     [{callback, fun onTextUpdated/2}, {userData, UpdateFileButton}]),
   wxButton:connect(UpdateFileButton, command_button_clicked,
-    [{callback, fun onUpdateFileButtonClick/2}, {userData, {TextEditor, LoadFileBrowser, UpdateFileButton}}]),
+    [{callback, fun onUpdateFileButtonClick/2}, {userData, {TextEditor, SavedFilesAddress, UpdateFileButton, AllFiles}}]),
   wxButton:connect(ClearLoggerButton, command_button_clicked,
     [{callback, fun onClearLoggerButtonClick/2}, {userData, Logger}]),
   wxButton:connect(StatsButton, command_button_clicked,
@@ -91,11 +88,10 @@ initMainFrameCallbacks(MainFrame, StatsFrame) ->
   wxButton:connect(DeleteButton, command_button_clicked,
     [{callback, fun onDeleteButtonClick/2}, {userData, AllFiles}]),
   wxListBox:connect(AllFiles, command_listbox_selected,
-    [{callback, fun onFileSelection/2}, {userData, DeleteButton}]),
+    [{callback, fun onFileSelection/2}, {userData, {DeleteButton, LoadFileButton}}]),
   ok.
 
 onStoreFileButtonClick(#wx{ userData = StoreFileBrowser },_) ->
-  incrSentCounter(),
   {ListOfNodes,AmountOfNodes} = gen_server:call({global, server},get_nodes),
   %io:format("Received nodes from server: ~p~n,", Nodes),
 
@@ -110,21 +106,14 @@ onStoreFileButtonClick(#wx{ userData = StoreFileBrowser },_) ->
 
   storeFileInSystem(OriginalFileNameWithPath).
 
-onLoadFileButtonClick(#wx{ userData = {LoadFileBrowser, TextEditor} },_) ->
-  incrRecvCounter(),
-  %todo: load file remotely
-  % read contents of the file
-  Path = wxFilePickerCtrl:getPath(LoadFileBrowser),
-  OriginalFileName = filename:basename(Path),
-
-  %% from here on it is assumed that OriginalFileName is the name of the file WITHOUT the path
-  %%todo: implement another button/method in gui to request list of saved files from server and present them to user
-
-  loadFileFromSystemAndSaveLocally(OriginalFileName),
-
+onLoadFileButtonClick(#wx{ userData = {AllFiles, TextEditor, SavedFilesAddress} },_) ->
+  % get selected file name and load it
+  SelectedFile = wxListBox:getStringSelection(AllFiles),
+  loadFileFromSystemAndSaveLocally(SelectedFile),
+  % read content of file and display in editor
+  Path = SavedFilesAddress ++ SelectedFile,
   {ok, Content} = file:open(Path, read),
   Text = getLines(Content),
-  % write to gui
   wxTextCtrl:enable(TextEditor),
   wxTextCtrl:clear(TextEditor),
   wxTextCtrl:changeValue(TextEditor, Text).
@@ -138,11 +127,16 @@ getLines(Content) ->
 onTextUpdated(#wx{ userData = UpdateFileButton },_) ->
   wxButton:enable(UpdateFileButton).
 
-onUpdateFileButtonClick(#wx{ userData = {TextEditor, LoadFileBrowser, UpdateFileButton} },_) ->
-  File = wxFilePickerCtrl:getPath(LoadFileBrowser),
-  wxTextCtrl:saveFile(TextEditor, [{file, File}]),
+onUpdateFileButtonClick(#wx{ userData = {TextEditor, SavedFilesAddress, UpdateFileButton, AllFiles} },_) ->
+  % construct file path
+  SelectedFile = wxListBox:getStringSelection(AllFiles),
+  Path = SavedFilesAddress ++ SelectedFile,
+  % save locally
+  wxTextCtrl:saveFile(TextEditor, [{file, Path}]),
+  % store in system
+  storeFileInSystem(Path),
   wxButton:disable(UpdateFileButton),
-  log("Updated file: ~s", [File]).
+  log("Updated file: ~s", [SelectedFile]).
 
 onClearLoggerButtonClick(#wx{ userData = Logger },_) ->
   wxTextCtrl:clear(Logger).
@@ -200,12 +194,8 @@ getMemoryStats() ->
   NeededInfo = lists:sublist(MemoryInfo, 6, 2),
   NeededInfo.
 
-getFilesStats() ->
-  Received = ets:lookup_element(countersTable, received, 2),
-  Sent = ets:lookup_element(countersTable, sent, 2),
-  {Received, Sent}.
-
 onNodeSelection(#wx{ userData = {Nodes, DiskSpace, Memory, Stats }},_) ->
+  wxTextCtrl:clear(Stats),
   SelectedNode = wxListBox:getStringSelection(Nodes),
   TrimmedNode = string:substr(SelectedNode,2, length(SelectedNode)-2),
   % get disk info
@@ -219,8 +209,29 @@ onNodeSelection(#wx{ userData = {Nodes, DiskSpace, Memory, Stats }},_) ->
   FreeMemoryNum = element(2, FreeMemoryTuple),
   TotalMemoryNum = element(2, TotalMemoryTuple),
   UsedMemory = TotalMemoryNum - FreeMemoryNum,
-  wxGauge:setValue(Memory, round(UsedMemory/TotalMemoryNum*100)).
+  wxGauge:setValue(Memory, round(UsedMemory/TotalMemoryNum*100)),
   % print file counter
+  FileCounters = gen_server:call({global, server}, get_file_counters),
+  printStats("Files stored: ~p~nFiles loaded: ~p", [element(1, FileCounters), element(2,FileCounters)], Stats),
+  % print files table
+  Table = gen_server:call({global, server}, get_files),
+  % print to total files
+  printStats("--------------------------------------------------", [], Stats),
+  printStats("Total files: ~p", [element(2, Table)], Stats),
+  printStats("--------------------------------------------------", [], Stats),
+  ListOfFileTuples = element(1, Table),
+  % print files table
+  wxTextCtrl:appendText(Stats, lists:flatten(io_lib:format("~p", [ListOfFileTuples]))).
+
+
+printStats(String, Args, Stats) ->
+  wxTextCtrl:enable(Stats),
+  List = io_lib:format(String,Args),
+  Text = lists:flatten(List),
+  wxTextCtrl:appendText(Stats, Text),
+  wxTextCtrl:appendText(Stats,"\n").
+  %wxTextCtrl:changeValue(Stats, Text).
+
 
 initStatFrameCallbacks(StatsFrame) ->
   % get elements
@@ -229,11 +240,14 @@ initStatFrameCallbacks(StatsFrame) ->
   Memory = wxXmlResource:xrcctrl(StatsFrame, "Memory", wxGauge),
   Stats = wxXmlResource:xrcctrl(StatsFrame, "Stats", wxTextCtrl),
   RefreshButton = wxXmlResource:xrcctrl(StatsFrame, "RefreshButton", wxButton),
+  CloseButton = wxXmlResource:xrcctrl(StatsFrame, "StatsCloseButton", wxButton),
   % init callbacks
   wxListBox:connect(Nodes, command_listbox_selected,
     [{callback, fun onNodeSelection/2}, {userData, {Nodes, DiskSpace, Memory, Stats}}]),
   wxButton:connect(RefreshButton, command_button_clicked,
-    [{callback, fun onRefreshButtonClicked/2}, {userData, Nodes}]).
+    [{callback, fun onRefreshButtonClicked/2}, {userData, Nodes}]),
+  wxButton:connect(CloseButton, command_button_clicked,
+    [{callback, fun onCloseButtonClicked/2}, {userData, StatsFrame}]).
 
 connectToServer(NodeName) ->
   net_kernel:start([NodeName, longnames]),
@@ -391,14 +405,6 @@ otherNodesListenerLoop(SavedFilesAddress) ->
       otherNodesListenerLoop(SavedFilesAddress)
   end.
 
-% increment recv counter
-incrRecvCounter()->
-  ets:update_counter(countersTable, received, {2,1}).
-
-% increment sent counter
-incrSentCounter()->
-  ets:update_counter(countersTable, sent, {2,1}).
-
 % wait until all file pieces arrive when loading file from other nodes
 checkThatAllPiecesAreHere(RequiredSize) ->
   case ets:info(file_pieces,size) of
@@ -518,5 +524,9 @@ onDeleteButtonClick(#wx{ userData = AllFiles },_) ->
   deleteFileFromSystem(Selection).
 
 
-onFileSelection(#wx{ userData = DeleteButton },_) ->
-  wxButton:enable(DeleteButton).
+onFileSelection(#wx{ userData = {DeleteButton, LoadFileButton} },_) ->
+  wxButton:enable(DeleteButton),
+  wxButton:enable(LoadFileButton).
+
+onCloseButtonClicked(#wx{ userData = StatsFrame },_) ->
+  wxFrame:hide(StatsFrame).
