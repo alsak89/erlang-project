@@ -8,7 +8,7 @@
 
 -include_lib("wx/include/wx.hrl").
 
--import(file_functions, [split_file/4,merge_file/3]).
+-import(file_functions, [split_file/3,merge_file/4]).
 
 main(NodeName,SavedFilesAddress) ->
 
@@ -429,13 +429,16 @@ deleteFilesHelper(ListOfFilePiecesWithNodes) ->
 % given a file name without path, delete it from system(assumes it exists)
 deleteFileFromSystem(OriginalFileName) ->
   %% request file pieces locations from server for deletion
-  {ListOfFilePiecesWithNodes1,ListOfFilePiecesWithNodes2} = gen_server:call({global, server}, {delete, OriginalFileName}),
-  %log("Requested info for file ~s from server, received: ~p", [OriginalFileName,ListOfFilePiecesWithNodes2]),
 
-  deleteFilesHelper(ListOfFilePiecesWithNodes1),
-  deleteFilesHelper(ListOfFilePiecesWithNodes2),
+  case gen_server:call({global, server}, {delete, OriginalFileName}) of
 
-  %log("File ~s deleted succesfuly from system", [OriginalFileName,ListOfFilePiecesWithNodes2]),
+    {ListOfFilePiecesWithNodes1,ListOfFilePiecesWithNodes2} ->
+      deleteFilesHelper(ListOfFilePiecesWithNodes1),
+      deleteFilesHelper(ListOfFilePiecesWithNodes2);
+
+    {ListOfFilePiecesWithNodes} ->
+      deleteFilesHelper(ListOfFilePiecesWithNodes)
+  end,
   ok.
 
 % given a file name without path, load it from the system and save it locally
@@ -493,6 +496,8 @@ storeFileInSystem(OriginalFileNameWithPath) ->
 
   %% get a list from the table
   ListOfBinaries = ets:tab2list(TableOfBinaries),
+
+  log("The list of binaries is ~p, the list of nodes is ~p",[ListOfBinaries,ListOfOnlyNodes]),
 
   %% create a new list where for each node there is a file tuple(consisting of file name and binary)
   ListOfNodesWithFiles = lists:zipwith(fun({FileName,FileBinary},Node) -> {Node,{FileName,FileBinary}} end,ListOfBinaries,ListOfOnlyNodes),

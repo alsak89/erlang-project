@@ -82,14 +82,19 @@ handle_call(get_files, _From, State = #server_state{}) ->
 % handles delete request
 handle_call({delete,File}, _From, State = #server_state{}) ->
   io:format("Server received a delete request of file ~s ~n",[File]),
-  [{_,FilesToDelete1},{_,FilesToDelete2}] = ets:lookup(files, File),
-  ets:delete(files,File),
-  {reply,{FilesToDelete1,FilesToDelete2}, State};
+
+  case ets:lookup(files, File) of
+    [{_,FilesToDelete1},{_,FilesToDelete2}] ->
+      ets:delete(files,File),
+      {reply,{FilesToDelete1,FilesToDelete2}, State};
+    [{_,FilesToDelete}] ->
+      ets:delete(files,File),
+      {reply,{FilesToDelete}, State}
+  end;
 
 % handles node_closing request
 handle_call({node_closing,Node}, _From, State = #server_state{}) ->
   io:format("Server received a node_closing request from node ~s ~n",[Node]),
-  %todo: handle redistribution of files in server side
   rearrangeFiles(Node),
   {reply, ok, State}.
 
