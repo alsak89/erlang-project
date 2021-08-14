@@ -50,17 +50,23 @@ init([]) ->
   % start disk monitoring
   application:start(sasl),
   application:start(os_mon),
+  % ets table for transferred files counters
+  ets:new(countersTable,[named_table, set, public]),
+  ets:insert(countersTable, {received,0}),
+  ets:insert(countersTable, {sent,0}),
   {ok, #server_state{}}.
 
 % handles store request
 % store record = {my_file.txt, [{my_file_1.txt, client1@IP}, {my_file_2.txt, client2@IP}]}
 handle_call({store, StoreRecord}, _From, State = #server_state{}) ->
+  incrSentCounter(),
   io:format("Server received a store record: ~p~n", [StoreRecord]),
   ets:insert(files, StoreRecord),
   {reply, ok, State};
 
 % handles load request
 handle_call({load, File}, _From, State = #server_state{}) ->
+  incrRecvCounter(),
   io:format("Server received a load request: ~s~n", [File]),
   {reply, lists:nth(1,ets:lookup(files, File)), State};
 
@@ -70,9 +76,13 @@ handle_call(get_nodes, _From, State = #server_state{}) ->
   {reply, {ets:tab2list(storage_nodes),ets:info(storage_nodes,size)}, State};
 
 % handles request for statistics
-handle_call(stats, _From, State = #server_state{}) ->
-  io:format("Server received a statistics request ~n"),
-  {reply, {ets:tab2list(storage_nodes),ets:info(storage_nodes,size)}, State};
+%%handle_call(stats, _From, State = #server_state{}) ->
+%%  io:format("Server received a statistics request ~n"),
+%%  {reply, {ets:tab2list(storage_nodes),ets:info(storage_nodes,size)}, State};
+
+handle_call(get_file_counters, _From, State = #server_state{}) ->
+  io:format("Server received get_file_counters request~n"),
+  {reply, getFilesStats(), State};
 
 % handles request for files in system
 handle_call(get_files, _From, State = #server_state{}) ->
@@ -147,3 +157,16 @@ nodesListener(ServerPid) ->
       ets:delete(storage_nodes, Node),
       nodesListener(ServerPid)
   end.
+
+% increment recv counter
+incrRecvCounter()->
+  ets:update_counter(countersTable, received, {2,1}).
+
+% increment sent counter
+incrSentCounter()->
+  ets:update_counter(countersTable, sent, {2,1}).
+
+getFilesStats() ->
+  Received = ets:lookup_element(countersTable, received, 2),
+  Sent = ets:lookup_element(countersTable, sent, 2),
+  {Received, Sent}.
