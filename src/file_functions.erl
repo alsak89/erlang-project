@@ -114,13 +114,22 @@ copyFromFileToPieces(SaveOrTable,TableOfBinaries,FileName,FileInBinary, PieceSiz
           %% write that part to the new file
           file:write_file(NewFileName, PieceFileInBinary);
         table ->
+
+          io:format("Now handling leftover~n",[]),
+
           FinalFileName = filename:rootname(filename:basename(FileName)),
-          NewFileName = filename:join([
+          LastFileNameFromTable = filename:join([
               FinalFileName ++
               "_part_" ++
-              lists:flatten(io_lib:format("~p",[CurrentPieceIndex])) ++
+              lists:flatten(io_lib:format("~p",[CurrentPieceIndex-1])) ++
               ".txt"]),
-          ets:insert(TableOfBinaries,{NewFileName,PieceFileInBinary})
+
+          io:format("Last file name is ~p ~n",[LastFileNameFromTable]),
+          %% add leftover to last file to avoid information loss
+          [{_,LastFileBinary}] = ets:take(TableOfBinaries,LastFileNameFromTable),
+
+          io:format("Its binary is ~p , the added piece binary is ~p~n",[LastFileBinary,PieceFileInBinary]),
+          ets:insert(TableOfBinaries,{LastFileNameFromTable,<<LastFileBinary/binary,PieceFileInBinary/binary>>})
       end
   end,
   TableOfBinaries;

@@ -12,7 +12,7 @@
 -behaviour(gen_statem).
 
 %% API
--export([start_link/0]).
+-export([start_link/2]).
 
 %% gen_statem callbacks
 -export([init/1, format_status/2, state_name/3, handle_event/4, terminate/3,
@@ -29,8 +29,8 @@
 %% @doc Creates a gen_statem process which calls Module:init/1 to
 %% initialize. To ensure a synchronized start-up procedure, this
 %% function does not return until Module:init/1 has returned.
-start_link() ->
-  gen_statem:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(NodeName,SavedFilesAddress) ->
+  gen_statem:start_link({local, ?SERVER}, ?MODULE, [NodeName,SavedFilesAddress], []).
 
 %%%===================================================================
 %%% gen_statem callbacks
@@ -40,8 +40,9 @@ start_link() ->
 %% @doc Whenever a gen_statem is started using gen_statem:start/[3,4] or
 %% gen_statem:start_link/[3,4], this function is called by the new
 %% process to initialize.
-init([]) ->
-  {ok, state_name, #client_state{}}.
+init([NodeName,SavedFilesAddress]) ->
+  gui:main(NodeName,SavedFilesAddress),
+  {ok, waiting, #client_state{}}.
 
 %% @private
 %% @doc This function is called by a gen_statem when it needs to find out
@@ -63,6 +64,10 @@ format_status(_Opt, [_PDict, _StateName, _State]) ->
 %% functions is called when gen_statem receives and event from
 %% call/2, cast/2, or as a normal process message.
 state_name(_EventType, _EventContent, State = #client_state{}) ->
+  NextStateName = next_state,
+  {next_state, NextStateName, State}.
+
+waiting(_EventType, _EventContent, State = #client_state{}) ->
   NextStateName = next_state,
   {next_state, NextStateName, State}.
 
