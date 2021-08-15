@@ -100,9 +100,6 @@ initMainFrameCallbacks(MainFrame, StatsFrame, SavedFilesAddress) ->
 
 onStoreFileButtonClick(#wx{ userData = StoreFileBrowser },_) ->
 
-  incrSentCounter(),
-
-
   OriginalFileNameWithPath = wxFilePickerCtrl:getPath(StoreFileBrowser),
 
   storeFileInSystem(OriginalFileNameWithPath).
@@ -415,8 +412,9 @@ otherNodesListenerLoop(SavedFilesAddress) ->
       {ok,FileBinary} = file:read_file(NewFileName),
 
       % send file to recipient node
-      {other_nodes_listener,RecipientNode} ! {save_file,FileName,FileBinary};
+      {other_nodes_listener,RecipientNode} ! {save_file,FileName,FileBinary},
 
+      otherNodesListenerLoop(SavedFilesAddress);
     _ ->
       otherNodesListenerLoop(SavedFilesAddress)
   end.
