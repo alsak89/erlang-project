@@ -31,4 +31,9 @@ Steps for client initialization: (can only be done after server is up):
 4. Run net_adm:ping(ServerName), where ServerName is the same exact name as written in line 43 of server.erl.
 5. Run gui:main(ServerName,SavedFileAddress), where ServerName is the same as in step 4, and SavedFileAddress is a string containing the path in which files are to be saved on the current machine.
 
+
+# Link to YouTube video: https://youtu.be/3x7RwxibDC8
+
+# Link to presentation(password is erl): https://easyupload.io/jt1ee6
+
 Enjoy!
