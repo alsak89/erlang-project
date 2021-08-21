@@ -10,7 +10,7 @@
 
 -import(file_functions, [split_file/3,merge_file/4]).
 
-main(NodeName,SavedFilesAddress) ->
+main(ServerName,SavedFilesAddress) ->
 
   % save file address in ets so listening process get it
   ets:new(general_node_ets,[named_table,public]),
@@ -26,7 +26,7 @@ main(NodeName,SavedFilesAddress) ->
   StatsFrame = initFrame("StatsFrame"),
   initMainFrameCallbacks(MainFrame, StatsFrame, SavedFilesAddress),
   initStatFrameCallbacks(StatsFrame),
-  connectToServer(NodeName),
+  connectToServer(ServerName),
   % ets table for transferred files counters
   ets:new(countersTable,[named_table, set, public]),
   ets:insert(countersTable, {received,0}),
@@ -247,9 +247,9 @@ initStatFrameCallbacks(StatsFrame) ->
   wxButton:connect(CloseButton, command_button_clicked,
     [{callback, fun onCloseButtonClicked/2}, {userData, StatsFrame}]).
 
-connectToServer(NodeName) ->
-  net_kernel:start([NodeName, longnames]),
-  net_kernel:connect_node('server@127.0.0.1').
+connectToServer(ServerName) ->
+  net_kernel:start([node(), longnames]),
+  net_kernel:connect_node(ServerName).
 
 
 % get a list of all keys from given ets table
@@ -281,6 +281,9 @@ sendFiles(TableOfNodesWithFiles,CurrentNode,ListOfNodesAndFileNames,SecondListOf
 
   log("Sending file ~s to node ~s",[FileName,CurrentNode]),
 
+  {ok,PID} = ftp:open(CurrentNode),
+  ftp:send_bin(PID,FileBinary,FileName),
+  ftp:close(PID),
   %% SEND FILE TO NODE 1
   {other_nodes_listener,CurrentNode} ! {save_file,FileName,FileBinary},
 
