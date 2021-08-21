@@ -281,9 +281,6 @@ sendFiles(TableOfNodesWithFiles,CurrentNode,ListOfNodesAndFileNames,SecondListOf
 
   log("Sending file ~s to node ~s",[FileName,CurrentNode]),
 
-  {ok,PID} = ftp:open(CurrentNode),
-  ftp:send_bin(PID,FileBinary,FileName),
-  ftp:close(PID),
   %% SEND FILE TO NODE 1
   {other_nodes_listener,CurrentNode} ! {save_file,FileName,FileBinary},
 
